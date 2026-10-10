@@ -1,0 +1,1020 @@
+# TaskFlow AI — API Contract
+#
+# Status: Approved
+# Version: 0.1 (this document's own revision, distinct from info.version below)
+# Baseline: docs/product/prd.md v0.3 (Approved), docs/product/user-stories.md v0.2 (Approved),
+#           docs/architecture/system-design.md v0.2 (Approved), docs/architecture/database-design.md v0.1 (Approved)
+#
+# Every operation cites the FR-xxx/US-xxx it implements via its `description`. Role requirements are stated
+# explicitly per operation; the server re-derives the caller's role fresh from the database on every request
+# (system-design.md §5) — a client never supplies its own role.
+#
+# Not part of this surface: the restricted diagnostic route for raw AI output (system-design.md §11) is a
+# separate internal-only service reachable with a distinct operator credential, not a workspace-scoped JWT —
+# it is intentionally excluded from this product-facing API contract.
+#
+# Validation note: no YAML/OpenAPI linter was available in this environment (no network/dependency install
+# performed, per instructions). This file was checked manually for flow-mapping syntax (no unquoted commas
+# or colons inside `{ }` scalars), brace balance, and $ref target consistency, but has not been run through
+# an automated OpenAPI validator (e.g. swagger-cli, spectral). Running one is recommended before relying on
+# this file to generate code or mocks.
+#
+# Approved by the user on 2026-10-09. This document is a baseline, alongside docs/product/prd.md v0.3,
+# docs/product/user-stories.md v0.2, docs/architecture/system-design.md v0.2, and
+# docs/architecture/database-design.md v0.1, for docs/security/threat-model.md and all subsequent
+# specification documents, per the project's spec-driven development workflow.
+
+openapi: 3.0.3
+
+info:
+  title: TaskFlow AI API
+  version: 0.1.0
+  description: >
+    REST API for TaskFlow AI's v1 scope: authentication, workspaces/roles/invitations, projects, tasks,
+    and the three AI features (plan suggestions, risk assessments, progress summaries). Real-time updates
+    (Socket.IO) are documented in system-design.md §7 and are not part of this REST contract.
+
+servers:
+  - url: /api/v1
+    description: Relative path; actual host/port is an environment/deployment concern, not an API-contract one.
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Auth
+  - name: Workspaces
+  - name: Invitations
+  - name: Projects
+  - name: Tasks
+  - name: AI Planning
+  - name: AI Risk Analysis
+  - name: AI Progress Summaries
+
+paths:
+  # ───────────────────────────── Auth (FR-001–009) ─────────────────────────────
+
+  /auth/signup:
+    post:
+      tags: [Auth]
+      summary: Create an account (FR-001)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8, description: Minimum length is illustrative; exact password policy is not specified in the PRD and is left to implementation-plan.md. }
+      responses:
+        '201':
+          description: Account created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '409':
+          description: Email already registered (FR-001).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in (FR-002, FR-004, FR-007)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        '200':
+          description: >
+            Authenticated. The access token is returned in the body (held client-side in memory only —
+            FR-007); the refresh token and a CSRF token are set as cookies (system-design.md §4), not
+            returned in the body.
+          headers:
+            Set-Cookie:
+              description: Sets the httpOnly/Secure/SameSite=Strict refresh-token cookie and a non-httpOnly CSRF cookie.
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken: { type: string, description: 'JWT, ~15 minute lifetime target (FR-004/NFR-014).' }
+                  user: { $ref: '#/components/schemas/User' }
+        '401':
+          description: >
+            Invalid email or password — the same generic message either way, never indicating which
+            field was wrong (US-002).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Rotate the refresh token and obtain a new access token (FR-005)
+      security:
+        - refreshCookie: []
+          csrfHeader: []
+      responses:
+        '200':
+          description: New access token issued; refresh-token cookie rotated (single-use consumption, system-design.md §4).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken: { type: string }
+        '401':
+          description: >
+            Refresh token missing, expired, or already consumed. If already consumed (reuse detected),
+            the entire token family is revoked server-side (FR-005) — the client must re-authenticate.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: CSRF header missing or not matching the CSRF cookie (FR-008/NFR-011).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Log out (FR-003, FR-006)
+      security:
+        - refreshCookie: []
+          csrfHeader: []
+      responses:
+        '204':
+          description: >
+            Current refresh token invalidated server-side immediately. Note: any still-unexpired access
+            token issued before logout remains usable until its own expiry (≤15 min) — access tokens are
+            not independently revocable (FR-004, documented explicitly in system-design.md §4).
+        '403':
+          description: CSRF header missing or not matching the CSRF cookie.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /auth/password-reset/request:
+    post:
+      tags: [Auth]
+      summary: Request a password-reset email (FR-009)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '202':
+          description: >
+            Always the same generic response regardless of whether the email matched an account
+            (account-enumeration prevention, FR-009). Rate-limited per email and per source IP.
+        '429':
+          description: Rate limit exceeded (FR-009).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /auth/password-reset/confirm:
+    post:
+      tags: [Auth]
+      summary: Complete a password reset (FR-009)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, newPassword]
+              properties:
+                token: { type: string, description: The single-use reset token from the emailed link. }
+                newPassword: { type: string }
+      responses:
+        '204':
+          description: >
+            Password updated; the reset token is consumed (single-use); all of the user's existing
+            refresh tokens/sessions are revoked (FR-009). Any still-unexpired access token survives
+            until its own natural expiry — see the note on `/auth/logout`.
+        '400':
+          description: Token expired, already used, or invalid.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  # ───────────────────────────── Workspaces & roles (FR-010–014, FR-096–099) ─────────────────────────────
+
+  /workspaces:
+    post:
+      tags: [Workspaces]
+      summary: Create a workspace (FR-010)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        '201':
+          description: Workspace created; caller becomes its Owner.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Workspace' }
+    get:
+      tags: [Workspaces]
+      summary: List workspaces the caller belongs to (FR-014)
+      responses:
+        '200':
+          description: Each entry includes the caller's role in that workspace.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/WorkspaceMembershipSummary' }
+
+  /workspaces/{workspaceId}/members:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+    get:
+      tags: [Workspaces]
+      summary: List workspace members (any role — FR-021-equivalent visibility for membership)
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Membership' }
+
+  /workspaces/{workspaceId}/members/{userId}:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - name: userId
+        in: path
+        required: true
+        schema: { type: string }
+    patch:
+      tags: [Workspaces]
+      summary: Change a member's role (FR-012, FR-096, FR-097)
+      description: >
+        Owner only. Changes a non-Owner member's role between `admin` and `member`. Rejected (403) if the
+        caller is not the Owner, or if the target is the Owner (ownership changes hands only via
+        `/workspaces/{workspaceId}/transfer-ownership`, FR-098) — never by this endpoint.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role: { type: string, enum: [admin, member] }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Membership' }
+        '403':
+          description: Caller is not the Owner, or the target is the Owner.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    delete:
+      tags: [Workspaces]
+      summary: Remove a member (FR-012)
+      description: >
+        Owner may remove any non-Owner member (Admin or Member). An Admin may remove only a Member
+        (never another Admin or the Owner). Rejected (403) otherwise.
+      responses:
+        '204':
+          description: Member removed.
+        '403':
+          description: Caller lacks authority over this target (FR-012).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /workspaces/{workspaceId}/transfer-ownership:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+    post:
+      tags: [Workspaces]
+      summary: Transfer ownership (FR-098, FR-099)
+      description: >
+        Owner only. Target must be an existing Admin or Member of this workspace (rejected if the target
+        has no membership here). On success, the caller becomes Admin and the target becomes Owner,
+        atomically (system-design.md §6) — the workspace always has exactly one Owner.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [toUserId]
+              properties:
+                toUserId: { type: string }
+      responses:
+        '200':
+          description: Ownership transferred.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Membership' }
+        '403':
+          description: Caller is not the Owner (FR-098 — only "the current Owner" may initiate a transfer).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '400':
+          description: Target is not an existing member of this workspace (FR-098).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  # ───────────────────────────── Invitations (FR-090–095) ─────────────────────────────
+
+  /workspaces/{workspaceId}/invitations:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+    post:
+      tags: [Invitations]
+      summary: Invite a user to the workspace (FR-090, FR-011)
+      description: >
+        Owner may invite at `admin` or `member` level. Admin may invite only at `member` level — an
+        Admin attempting to issue an `admin`-level invitation is rejected (403), server-side, regardless
+        of client-submitted role data (FR-090/FR-097).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, role]
+              properties:
+                email: { type: string, format: email, description: 'Normalized (lowercase, trimmed) before storage/comparison — FR-091.' }
+                role: { type: string, enum: [admin, member] }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Invitation' }
+        '403':
+          description: Caller is an Admin attempting an admin-level invitation, or lacks invite authority at all.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    get:
+      tags: [Invitations]
+      summary: List pending invitations for this workspace (Owner/Admin)
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Invitation' }
+
+  /workspaces/{workspaceId}/invitations/{invitationId}:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - name: invitationId
+        in: path
+        required: true
+        schema: { type: string }
+    delete:
+      tags: [Invitations]
+      summary: Revoke a pending invitation (FR-093)
+      description: >
+        Owner may revoke any pending invitation (Admin- or Member-level). Admin may revoke only pending
+        Member-level invitations — rejected (403) for an Admin-level invitation. See user-stories.md
+        US-017 for the one PRD-clause ambiguity flagged (not implemented here) around "another Admin's
+        higher authority."
+      responses:
+        '204':
+          description: Invitation revoked; its token can no longer be accepted (FR-092).
+        '403':
+          description: Caller lacks revocation authority over this invitation (FR-093).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /invitations/{token}/accept:
+    parameters:
+      - name: token
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [Invitations]
+      summary: Accept an invitation (FR-091, FR-092)
+      description: >
+        Requires the authenticated caller's normalized account email to exactly match the invitation's
+        normalized invited email (FR-091). Rejects (400) if the token is expired, already used, or
+        revoked (FR-092) — no membership is granted in that case.
+      responses:
+        '200':
+          description: Membership created with the invited role; token consumed (single-use).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Membership' }
+        '400':
+          description: Token expired, already used, revoked, or email mismatch.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  # ───────────────────────────── Projects (FR-020–022, FR-123) ─────────────────────────────
+
+  /workspaces/{workspaceId}/projects:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+    post:
+      tags: [Projects]
+      summary: Create a project (FR-020)
+      description: Owner/Admin only in v1 — no per-workspace override exists (PRD §4.2).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                description: { type: string }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+        '403':
+          description: Caller is a Member (FR-020).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    get:
+      tags: [Projects]
+      summary: List projects in the workspace (FR-021)
+      description: Any workspace member. Archived projects are included and marked `archived: true`.
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Project' }
+
+  /workspaces/{workspaceId}/projects/{projectId}:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [Projects]
+      summary: Get a project (FR-021)
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+    patch:
+      tags: [Projects]
+      summary: Update a project's name/description (FR-022)
+      description: Owner/Admin only — there is no "creating Member" exception, since Members cannot create projects (FR-020).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+        '403':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /workspaces/{workspaceId}/projects/{projectId}/archive:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags: [Projects]
+      summary: Archive a project (FR-022, FR-123)
+      description: >
+        Owner/Admin only. There is no permanent-delete endpoint — v1 supports archiving only (PRD §4.2).
+        Archiving does not delete the project's AI artifacts; they remain stored and viewable (FR-123).
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+        '403':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  # ───────────────────────────── Tasks (FR-030–034) ─────────────────────────────
+
+  /workspaces/{workspaceId}/projects/{projectId}/tasks:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags: [Tasks]
+      summary: Create a task (FR-030)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TaskCreateRequest' }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Task' }
+        '400':
+          description: Proposed assignee is not a member of this workspace (FR-033).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    get:
+      tags: [Tasks]
+      summary: List tasks in a project
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Task' }
+
+  /workspaces/{workspaceId}/projects/{projectId}/tasks/{taskId}:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/TaskId'
+    patch:
+      tags: [Tasks]
+      summary: Update a task, including status and assignment (FR-031, FR-032, FR-033, FR-034)
+      description: >
+        Caller must be the task's creator, its current assignee, or workspace Owner/Admin (FR-031).
+        Reassignment to a *different* person requires creator/Owner/Admin — the current assignee's own
+        authority covers self-unassignment only, not reassigning to someone else (FR-034, US-039).
+        A new `assigneeId` must reference an existing workspace member (FR-033).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TaskUpdateRequest' }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Task' }
+        '400':
+          description: Proposed assignee is not a workspace member (FR-033).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: Caller lacks authority over this task, or (for reassignment) is only the current assignee (FR-034).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    delete:
+      tags: [Tasks]
+      summary: Delete a task (FR-031)
+      description: Caller must be the task's creator, its current assignee, or workspace Owner/Admin.
+      responses:
+        '204':
+          description: Task deleted.
+        '403':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  # ───────────────────────────── AI task planning (FR-050–056) ─────────────────────────────
+
+  /workspaces/{workspaceId}/projects/{projectId}/ai/plans:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags: [AI Planning]
+      summary: Request an AI task-plan suggestion (FR-050)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [goalDescription]
+              properties:
+                goalDescription: { type: string }
+      responses:
+        '202':
+          description: >
+            Suggestion submitted for processing. The response's `state` reflects the outcome once
+            processing completes: `pending_review` (schema-valid — FR-051) or a generic error if the
+            model output failed validation or the provider/network call failed (never the raw output —
+            FR-125, system-design.md §9's two-category failure taxonomy).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlanArtifact' }
+    get:
+      tags: [AI Planning]
+      summary: List plan suggestions for this project (FR-080 audit trail)
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PlanArtifact' }
+
+  /workspaces/{workspaceId}/projects/{projectId}/ai/plans/{artifactId}:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ArtifactId'
+    get:
+      tags: [AI Planning]
+      summary: Get a plan suggestion (never includes raw model output — system-design.md §11)
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlanArtifact' }
+
+  /workspaces/{workspaceId}/projects/{projectId}/ai/plans/{artifactId}/approve:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ArtifactId'
+    post:
+      tags: [AI Planning]
+      summary: Approve a pending plan suggestion (FR-052, FR-055)
+      description: >
+        Owner/Admin only, re-verified fresh at the moment of commit, inside the same transaction that
+        performs the state transition (system-design.md §8) — not merely at request entry. Approval,
+        revalidation against current project state, and task creation are all-or-nothing (FR-052,
+        FR-056): if the project changed materially since generation (e.g., archived, or an assignee no
+        longer a member), or if task creation fails partway, no tasks are created and the suggestion
+        remains `pending_review`. If a concurrent approve/reject request already won the race, this
+        returns 409 (US-048/049).
+      responses:
+        '200':
+          description: Approved; proposed tasks created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlanArtifact' }
+        '403':
+          description: Caller is not Owner/Admin (fresh check, not cached).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: Suggestion is no longer `pending_review` (already approved/rejected by a concurrent request).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: >
+            Revalidation against the project's current state failed (FR-056) — e.g. project archived,
+            or an assignee is no longer a workspace member. No tasks created; suggestion remains
+            `pending_review`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /workspaces/{workspaceId}/projects/{projectId}/ai/plans/{artifactId}/reject:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ArtifactId'
+    post:
+      tags: [AI Planning]
+      summary: Reject a pending plan suggestion (FR-053, FR-055)
+      description: Owner/Admin only. Terminal — a rejected suggestion can never later be approved (FR-054).
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlanArtifact' }
+        '403':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: Suggestion is no longer `pending_review` (concurrent approve/reject already won — US-048/049).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  # ───────────────────────────── AI risk analysis (FR-060/061) ─────────────────────────────
+
+  /workspaces/{workspaceId}/projects/{projectId}/ai/risk-assessments:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags: [AI Risk Analysis]
+      summary: Request an AI risk assessment (FR-060)
+      responses:
+        '202':
+          description: >
+            Submitted for processing. No approval step — a schema-valid result moves straight to
+            `generated` and is immediately visible to authorized project members (FR-061). Never creates,
+            modifies, or deletes task/project data (FR-081).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RiskArtifact' }
+    get:
+      tags: [AI Risk Analysis]
+      summary: List risk assessments for this project
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/RiskArtifact' }
+
+  /workspaces/{workspaceId}/projects/{projectId}/ai/risk-assessments/{artifactId}:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ArtifactId'
+    get:
+      tags: [AI Risk Analysis]
+      summary: Get a risk assessment
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RiskArtifact' }
+
+  # ───────────────────────────── AI progress summaries (FR-070–073, FR-103–107) ─────────────────────────────
+
+  /workspaces/{workspaceId}/projects/{projectId}/ai/summaries:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags: [AI Progress Summaries]
+      summary: Request an on-demand progress summary (FR-070)
+      description: >
+        No approval step (FR-072). Scheduled summaries (FR-071, FR-103–107) are produced by the
+        background job described in system-design.md §10, not through this endpoint — they appear here
+        once generated, via the GET list below, with no notification of any kind (FR-073/107).
+      responses:
+        '202':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SummaryArtifact' }
+    get:
+      tags: [AI Progress Summaries]
+      summary: List progress summaries for this project (on-demand and scheduled)
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SummaryArtifact' }
+
+  /workspaces/{workspaceId}/projects/{projectId}/ai/summaries/{artifactId}:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ArtifactId'
+    get:
+      tags: [AI Progress Summaries]
+      summary: Get a progress summary
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SummaryArtifact' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Short-lived access token (FR-004). Carries no role/workspace claim — role is re-derived server-side on every request (system-design.md §5).
+    refreshCookie:
+      type: apiKey
+      in: cookie
+      name: refreshToken
+      description: httpOnly, Secure, SameSite=Strict (FR-007).
+    csrfHeader:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+      description: Double-submit CSRF token, must match the non-httpOnly CSRF cookie (FR-008/NFR-011).
+
+  parameters:
+    WorkspaceId:
+      name: workspaceId
+      in: path
+      required: true
+      schema: { type: string }
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema: { type: string }
+    TaskId:
+      name: taskId
+      in: path
+      required: true
+      schema: { type: string }
+    ArtifactId:
+      name: artifactId
+      in: path
+      required: true
+      schema: { type: string }
+
+  schemas:
+    Error:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          description: >
+            Always a generic, non-identifying message where the PRD requires one (e.g. login failures —
+            US-002; AI validation failures — FR-125; password-reset requests — FR-009). Never includes
+            raw AI model output, stack traces, or other sensitive detail.
+
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        email: { type: string, format: email }
+
+    Workspace:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+
+    WorkspaceMembershipSummary:
+      type: object
+      description: A workspace plus the caller's role in it (FR-014).
+      properties:
+        workspace: { $ref: '#/components/schemas/Workspace' }
+        role: { $ref: '#/components/schemas/Role' }
+
+    Role:
+      type: string
+      enum: [owner, admin, member]
+      description: No `viewer` role exists in v1 (PRD §4.2).
+
+    Membership:
+      type: object
+      properties:
+        userId: { type: string }
+        workspaceId: { type: string }
+        role: { $ref: '#/components/schemas/Role' }
+
+    Invitation:
+      type: object
+      properties:
+        id: { type: string }
+        workspaceId: { type: string }
+        invitedEmail: { type: string, format: email }
+        role: { type: string, enum: [admin, member] }
+        status: { type: string, enum: [pending, accepted, revoked] }
+        expiresAt: { type: string, format: date-time }
+
+    Project:
+      type: object
+      properties:
+        id: { type: string }
+        workspaceId: { type: string }
+        name: { type: string }
+        description: { type: string }
+        archived: { type: boolean }
+
+    TaskStatus:
+      type: string
+      enum: [todo, in_progress, done]
+      description: >
+        Database-design.md §8's resolved v1 enum. Transitions are unrestricted — any status may move to
+        any other (e.g. reopening a `done` task back to `todo` is allowed).
+
+    Task:
+      type: object
+      properties:
+        id: { type: string }
+        workspaceId: { type: string }
+        projectId: { type: string }
+        title: { type: string }
+        description: { type: string }
+        status: { $ref: '#/components/schemas/TaskStatus' }
+        assigneeId: { type: string, nullable: true }
+        dueDate: { type: string, format: date-time, nullable: true }
+        aiOriginated: { type: boolean }
+        sourceArtifactId: { type: string, nullable: true }
+
+    TaskCreateRequest:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string }
+        description: { type: string }
+        status: { $ref: '#/components/schemas/TaskStatus' }
+        assigneeId: { type: string, nullable: true, description: Must be an existing member of this workspace (FR-033). }
+        dueDate: { type: string, format: date-time, nullable: true }
+
+    TaskUpdateRequest:
+      type: object
+      properties:
+        title: { type: string }
+        description: { type: string }
+        status: { $ref: '#/components/schemas/TaskStatus' }
+        assigneeId: { type: string, nullable: true, description: Setting this to null is a self-unassign if the caller is the current assignee (FR-034); setting it to a different user requires creator/Owner/Admin authority. }
+        dueDate: { type: string, format: date-time, nullable: true }
+
+    # AI artifacts: validatedOutput's exact shape (per-type) is intentionally left generic here — the
+    # concrete plan/risk/summary output schema is an implementation-plan-level detail once the AI
+    # orchestration module's prompt/response contract is built, not a v1 API-contract commitment.
+    # rawOutput deliberately never appears on any of these schemas (system-design.md §11).
+
+    PlanArtifact:
+      type: object
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        type: { type: string, enum: [plan] }
+        state: { type: string, enum: [pending_review, approved, rejected, invalid] }
+        requestedBy: { type: string }
+        requestedAt: { type: string, format: date-time }
+        approvedBy: { type: string, nullable: true }
+        approvedAt: { type: string, format: date-time, nullable: true }
+        rejectedBy: { type: string, nullable: true }
+        rejectedAt: { type: string, format: date-time, nullable: true }
+        validatedOutput:
+          type: object
+          nullable: true
+          description: Present only when `state` is not `invalid`. Never includes raw model output (FR-125).
+
+    RiskArtifact:
+      type: object
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        type: { type: string, enum: [risk] }
+        state: { type: string, enum: [generated, invalid] }
+        requestedBy: { type: string }
+        requestedAt: { type: string, format: date-time }
+        validatedOutput:
+          type: object
+          nullable: true
+          description: Present only when `state` is `generated`.
+
+    SummaryArtifact:
+      type: object
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        type: { type: string, enum: [summary] }
+        state: { type: string, enum: [generated, invalid] }
+        requestedBy: { type: string, nullable: true, description: Null for scheduler-generated summaries (FR-071) — there is no human requester. }
+        requestedAt: { type: string, format: date-time }
+        validatedOutput:
+          type: object
+          nullable: true
+          description: Present only when `state` is `generated`.

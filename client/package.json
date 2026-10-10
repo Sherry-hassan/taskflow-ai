@@ -1,0 +1,25 @@
+{
+  "name": "client",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "eslint-plugin-react": "^7.37.5",
+    "jsdom": "^25.0.1",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.3"
+  }
+}
