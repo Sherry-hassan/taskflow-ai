@@ -1,10 +1,11 @@
 # TaskFlow AI — Test Strategy
 
 Status: **Approved**
-Version: 0.2
-Baseline: `docs/product/prd.md` v0.4 (Approved), `docs/product/user-stories.md` v0.3 (Approved), `docs/architecture/system-design.md` v0.3 (Approved), `docs/architecture/database-design.md` v0.2 (Approved), `docs/api/openapi.yaml` (Approved), `docs/security/threat-model.md` v0.1 (Approved)
+Version: 0.3
+Baseline: `docs/product/prd.md` v0.4 (Approved), `docs/product/user-stories.md` v0.3 (Approved), `docs/architecture/system-design.md` v0.3 (Approved), `docs/architecture/database-design.md` v0.2 (Approved), `docs/api/openapi.yaml` (Approved), `docs/security/threat-model.md` v0.2 (Approved)
 
 **Revision history**
+* **0.3** — Found during M1 implementation: §5.1's CSRF bullet listed `password-reset-confirm` alongside `refresh`/`logout`, contradicting `openapi.yaml` (which correctly marks that endpoint `security: []`, fully anonymous) and FR-008 itself, which scopes CSRF to "refresh/logout" specifically because those endpoints "rely on a cookie" — `password-reset/confirm` doesn't; it's authenticated by token possession, and a locked-out user wouldn't have a CSRF cookie anyway. Removed `password-reset-confirm` from that bullet as a drafting error; no behavior or other document changes as a result.
 * **0.2** — Propagated PRD v0.4's FR-106 resolution into §5.5's retry test (now asserts the concrete "3 total attempts" bound).
 * **0.1** — Initial draft.
 
@@ -57,7 +58,7 @@ This is where most of the PRD's authorization and lifecycle guarantees are actua
 * Signup/login/logout happy paths and their documented error responses (FR-001–003).
 * Access-token lifetime and no-role-claim shape (FR-004, FR-097).
 * Refresh rotation: single-use consumption; **concurrent refresh race** — fire two refresh requests with the same token via `Promise.all`, assert exactly one succeeds and the token family is revoked (FR-005, `system-design.md` §4's documented race outcome).
-* CSRF: refresh/logout/password-reset-confirm rejected without a matching CSRF header (FR-008/NFR-011).
+* CSRF: refresh/logout rejected without a matching CSRF header (FR-008/NFR-011). (`password-reset/confirm` is intentionally excluded — it is anonymous/token-authenticated, not cookie-authenticated, per `openapi.yaml` and FR-008's own scoping.)
 * Password reset: generic response regardless of account existence; rate-limit triggers on repeated requests; successful reset revokes all refresh tokens; a still-valid access token issued before the reset remains usable until its own expiry — this is an explicit **positive** assertion (not a bug) per `system-design.md` §4's documented tradeoff (FR-009).
 * **Gap carried from `threat-model.md` §7.1**: no login rate-limiting is specified anywhere upstream of this document — this document cannot invent a test for a control the PRD/architecture never defined. If/when `implementation-plan.md` or a PRD revision adds one, a corresponding test is added then.
 

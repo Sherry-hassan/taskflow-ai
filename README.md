@@ -31,7 +31,11 @@ mongosh --port 27017 --eval "rs.initiate()"
 
 After that, `mongodb://localhost:27017` (used as `MONGODB_URI` in `server/.env`) is replica-set-enabled and transactions will work.
 
-A managed replica set (e.g. MongoDB Atlas) satisfies this requirement automatically and needs no local setup.
+**This `mongod` process must stay running** for the server to connect — it's a long-lived process, not a one-off command. Run it in its own terminal (or as a background/service process) and leave it up for the duration of local development; if it's stopped, `npm run start --workspace server` will fail with `ECONNREFUSED` until it's started again.
+
+If port 27017 is already in use (e.g., by another MongoDB installation on your machine), pick a different port for both the `mongod --port` flag and `mongosh --port` above, and update `MONGODB_URI` in `server/.env` to match — e.g. `mongodb://127.0.0.1:<port>/taskflow_dev?directConnection=true`.
+
+A managed replica set (e.g. MongoDB Atlas) satisfies this requirement automatically, runs independently of your machine, and needs no local setup or long-lived local process.
 
 ## Install
 
