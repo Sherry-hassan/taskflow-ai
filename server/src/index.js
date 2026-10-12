@@ -1,4 +1,4 @@
-import { createApp } from './app.js';
+import { createServer } from './createServer.js';
 import { connectDb } from './db/connection.js';
 
 const port = process.env.PORT || 3001;
@@ -10,8 +10,8 @@ async function main() {
   }
   await connectDb(mongoUri);
 
-  const app = createApp();
-  app.listen(port, () => {
+  const { httpServer } = createServer();
+  httpServer.listen(port, () => {
     console.log(`Server listening on port ${port}`);
   });
 }

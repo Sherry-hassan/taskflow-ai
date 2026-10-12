@@ -4,6 +4,7 @@ import * as invitationController from '../controllers/invitationController.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireWorkspaceRole } from '../middleware/requireWorkspaceRole.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { createProjectRouter } from './projectRoutes.js';
 
 // A factory, consistent with authRoutes.js's createAuthRouter — avoids any
 // module-level singleton state (none is needed here, but the pattern is kept
@@ -53,6 +54,8 @@ export function createWorkspaceRouter() {
     requireWorkspaceRole('owner', 'admin'),
     asyncHandler(invitationController.revokeInvitation),
   );
+
+  router.use('/:workspaceId/projects', createProjectRouter());
 
   return router;
 }

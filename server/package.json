@@ -7,7 +7,7 @@
     "start": "node --env-file=.env src/index.js",
     "lint": "eslint .",
     "test": "vitest run",
-    "build": "node --check src/app.js && node --check src/index.js"
+    "build": "node --check src/app.js && node --check src/index.js && node --check src/createServer.js && node --check src/realtime/socketServer.js && node --check src/realtime/emitter.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -15,10 +15,12 @@
     "express": "^4.21.2",
     "express-rate-limit": "^7.4.1",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.9.3"
+    "mongoose": "^8.9.3",
+    "socket.io": "^4.8.1"
   },
   "devDependencies": {
     "mongodb-memory-server": "^10.1.2",
+    "socket.io-client": "^4.8.1",
     "supertest": "^7.0.0",
     "vitest": "^5.0.3"
   }
