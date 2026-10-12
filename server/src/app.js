@@ -1,6 +1,7 @@
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import { createAuthRouter } from './routes/authRoutes.js';
+import { createWorkspaceRouter, createInvitationAcceptRouter } from './routes/workspaceRoutes.js';
 
 export function createApp() {
   const app = express();
@@ -13,6 +14,8 @@ export function createApp() {
   });
 
   app.use('/api/v1/auth', createAuthRouter());
+  app.use('/api/v1/workspaces', createWorkspaceRouter());
+  app.use('/api/v1/invitations', createInvitationAcceptRouter());
 
   // Minimal, non-leaking error handler (standard Express hygiene — never return a
   // stack trace to the client). Full sanitized-logging discipline across the whole

@@ -1,6 +1,7 @@
 import { User } from '../models/User.js';
 import { PasswordResetToken } from '../models/PasswordResetToken.js';
 import { hashPassword, verifyPassword, generateToken, hashToken } from '../utils/crypto.js';
+import { normalizeEmail } from '../utils/email.js';
 import { sendPasswordResetEmail } from './notifications.js';
 import {
   signAccessToken,
@@ -10,11 +11,6 @@ import {
   revokeAllRefreshTokensForUser,
   REFRESH_REUSE_DETECTED,
 } from './tokenService.js';
-
-// FR-091's normalization rule, applied consistently here too (database-design.md §1).
-function normalizeEmail(email) {
-  return email.trim().toLowerCase();
-}
 
 export class EmailAlreadyRegisteredError extends Error {}
 export class InvalidCredentialsError extends Error {}

@@ -6,3 +6,10 @@
 export async function sendPasswordResetEmail({ to, token }) {
   // No-op in M1 — no real email provider is wired up yet.
 }
+
+// FR-094: invitation delivery shares this same narrow transactional-email
+// capability (FR-095). Same no-op-until-a-real-provider-exists pattern as above.
+// eslint-disable-next-line no-unused-vars
+export async function sendInvitationEmail({ to, token, workspaceId, role }) {
+  // No-op in M2 — no real email provider is wired up yet.
+}
