@@ -9,7 +9,7 @@ export class InvalidStatusError extends Error {}
 export class InsufficientTaskAuthorityError extends Error {}
 export class AssigneeOnlySelfUnassignError extends Error {}
 
-function toDto(task) {
+export function toDto(task) {
   return {
     id: task._id.toString(),
     workspaceId: task.workspaceId.toString(),
@@ -24,21 +24,36 @@ function toDto(task) {
   };
 }
 
-async function assertValidAssignee(workspaceId, assigneeId) {
+export async function assertValidAssignee(workspaceId, assigneeId, { session } = {}) {
   if (assigneeId === null || assigneeId === undefined) {
     return;
   }
   // FR-033: assignee must be a member of the same workspace as the task's
   // project — validated here, before saving, never trusted from the client
   // beyond "this is the ID they want."
-  const membership = await Membership.findOne({ workspaceId, userId: assigneeId });
+  const query = Membership.findOne({ workspaceId, userId: assigneeId });
+  const membership = session ? await query.session(session) : await query;
   if (!membership) {
     throw new InvalidAssigneeError();
   }
 }
 
-async function touchProjectActivity(projectId) {
-  await Project.updateOne({ _id: projectId }, { $set: { lastTaskActivityAt: new Date() } });
+export async function touchProjectActivity(projectId, { session, at = new Date() } = {}) {
+  await Project.updateOne(
+    { _id: projectId },
+    { $set: { lastTaskActivityAt: at } },
+    session ? { session } : {},
+  );
+}
+
+// The raw insert, with no membership/status validation and no realtime emit —
+// the primitive that both createTask (below) and M4's plan-approval flow
+// (aiOrchestrationService.js) build on, so task creation is never a parallel
+// code path (system-design.md §8). Session-aware so it can participate in
+// plan approval's transaction.
+export async function insertTaskDocument(fields, { session } = {}) {
+  const [task] = await Task.create([fields], { session });
+  return task;
 }
 
 // FR-030: any workspace member with access to a project (enforced by the
@@ -49,7 +64,7 @@ export async function createTask(workspaceId, projectId, userId, { title, descri
     throw new InvalidStatusError();
   }
 
-  const task = await Task.create({
+  const task = await insertTaskDocument({
     workspaceId,
     projectId,
     title,

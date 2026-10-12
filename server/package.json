@@ -10,6 +10,8 @@
     "build": "node --check src/app.js && node --check src/index.js && node --check src/createServer.js && node --check src/realtime/socketServer.js && node --check src/realtime/emitter.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "ajv": "^8.17.1",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.7",
     "express": "^4.21.2",

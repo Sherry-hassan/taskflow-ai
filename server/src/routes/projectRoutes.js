@@ -4,6 +4,7 @@ import * as taskController from '../controllers/taskController.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireWorkspaceRole } from '../middleware/requireWorkspaceRole.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { createAiPlanRouter } from './aiPlanRoutes.js';
 
 // Mounted at /api/v1/workspaces/:workspaceId/projects — merged params so
 // requireWorkspaceRole (which reads req.params.workspaceId) still works
@@ -47,6 +48,8 @@ export function createProjectRouter() {
     requireWorkspaceRole(),
     asyncHandler(taskController.deleteTask),
   );
+
+  router.use('/:projectId/ai/plans', createAiPlanRouter());
 
   return router;
 }
