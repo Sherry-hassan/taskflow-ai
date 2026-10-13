@@ -6,6 +6,7 @@ import { requireWorkspaceRole } from '../middleware/requireWorkspaceRole.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { createAiPlanRouter } from './aiPlanRoutes.js';
 import { createAiRiskRouter } from './aiRiskRoutes.js';
+import { createAiSummaryRouter } from './aiSummaryRoutes.js';
 
 // Mounted at /api/v1/workspaces/:workspaceId/projects — merged params so
 // requireWorkspaceRole (which reads req.params.workspaceId) still works
@@ -52,6 +53,7 @@ export function createProjectRouter() {
 
   router.use('/:projectId/ai/plans', createAiPlanRouter());
   router.use('/:projectId/ai/risk-assessments', createAiRiskRouter());
+  router.use('/:projectId/ai/summaries', createAiSummaryRouter());
 
   return router;
 }

@@ -5,7 +5,17 @@ const aiArtifactSchema = new mongoose.Schema(
     workspaceId: { type: mongoose.Schema.Types.ObjectId, ref: 'Workspace', required: true },
     projectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true },
     type: { type: String, enum: ['plan', 'risk', 'summary'], required: true },
-    requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    // Required except for a scheduler-produced summary (M6): FR-071's weekly job
+    // has no human requester at all, so this is the one reachable case where the
+    // field is legitimately absent — openapi.yaml's SummaryArtifact schema already
+    // documents this nullability; database-design.md §9 carries the same carve-out.
+    requestedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: function isRequestedByRequired() {
+        return !(this.type === 'summary' && this.scheduledWeekKey);
+      },
+    },
     // A snapshot/reference of exactly the fields FR-121 allows into the prompt —
     // never credentials, tokens, or other-workspace data, by construction (the
     // orchestration module has no reference to anything else to put here).

@@ -1,10 +1,11 @@
 # TaskFlow AI — Database Design
 
 Status: **Approved**
-Version: 0.2
+Version: 0.3
 Baseline: `docs/product/prd.md` v0.4 (Approved), `docs/product/user-stories.md` v0.3 (Approved), `docs/architecture/system-design.md` v0.3 (Approved)
 
 **Revision history**
+* **0.3** — Resolved a conflict between this document and `openapi.yaml` surfaced during M6 implementation: `AIArtifact.requestedBy` was stated as unconditionally `required`, but `openapi.yaml`'s `SummaryArtifact` schema already documented it as nullable for scheduler-generated summaries ("no human requester" — FR-071). Per explicit user decision, this document now carries the same carve-out rather than correcting `openapi.yaml`: `requestedBy` is required for every `AIArtifact` *except* a `type: 'summary'` document with `scheduledWeekKey` set.
 * **0.2** — Propagated PRD v0.4's FR-106 resolution into `ScheduledSummaryRun.attempts` and removed the resolved ambiguity from §12. Corrected `AIArtifact.rawOutput`: re-derived against FR-120/FR-125 as unconditionally required (every row implies an actual model response occurred), including `pending_review` — not conditionally required on a specific state subset as previously (and still incorrectly) stated.
 * **0.1** — Initial draft.
 
@@ -150,7 +151,7 @@ Every collection below is a Mongoose schema. Fields cite the `FR-xxx`/`US-xxx`/`
 | `workspaceId` | ObjectId, ref `Workspace`, required | |
 | `projectId` | ObjectId, ref `Project`, required | |
 | `type` | String enum: `plan`, `risk`, `summary`, required | |
-| `requestedBy` | ObjectId, ref `User`, required | FR-120. |
+| `requestedBy` | ObjectId, ref `User`, required **except** when `type: 'summary'` and `scheduledWeekKey` is set | FR-120. The scheduled summary job (§10) has no human requester at all — `openapi.yaml`'s `SummaryArtifact` schema already documents this field as nullable for that one case; this carve-out makes the two documents agree (0.3). |
 | `inputContextRef` | Mixed (sub-document), required | A snapshot/reference of exactly the fields FR-121 allows into the prompt (project title/description, task titles/statuses/due dates) — never credentials, tokens, or other-workspace data, by construction (`system-design.md` §8 step 2). |
 | `rawOutput` | String, required | Required for every document in this collection, not just certain states — every `AIArtifact` row (including one still in `pending_review`) resulted from an actual model response, valid or invalid (FR-120). A provider/network/timeout failure, where no model response was obtained at all, never creates an `AIArtifact` row in the first place (`system-design.md` §9 Category A) — so there is no reachable state within this collection where `rawOutput` would legitimately be absent. Never included in any user-facing API response (`system-design.md` §11) regardless of `type` or `state` — this is a storage-only field. |
 | `validatedOutput` | Mixed (sub-document), required for non-`invalid` states | The schema-validated, parsed structured form — this is what the user-facing API actually serializes. |
