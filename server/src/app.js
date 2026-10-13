@@ -3,6 +3,7 @@ import cookieParser from 'cookie-parser';
 import { createAuthRouter } from './routes/authRoutes.js';
 import { createWorkspaceRouter, createInvitationAcceptRouter } from './routes/workspaceRoutes.js';
 import { createDiagnosticRouter } from './routes/diagnosticRoutes.js';
+import { logAppError } from './utils/errorLogging.js';
 
 export function createApp() {
   const app = express();
@@ -21,12 +22,14 @@ export function createApp() {
   // diagnosticRoutes.js's own header note).
   app.use('/internal/diagnostics', createDiagnosticRouter());
 
-  // Minimal, non-leaking error handler (standard Express hygiene — never return a
-  // stack trace to the client). Full sanitized-logging discipline across the whole
-  // app is explicit M7 scope (implementation-plan.md v0.2 §9); not pulled forward here.
+  // Non-leaking error handler (standard Express hygiene — never return a stack
+  // trace to the client). FR-125's sanitized-logging discipline, previously
+  // specific to AI failures, now applies here too (implementation-plan.md v0.2
+  // §9, M7) — logAppError never receives err.message or err.stack, only an
+  // explicit allow-list of non-sensitive fields.
   // eslint-disable-next-line no-unused-vars
-  app.use((err, _req, res, _next) => {
-    console.error('Unhandled error:', err.message);
+  app.use((err, req, res, _next) => {
+    logAppError({ name: err.name || 'Error', method: req.method, path: req.path, statusCode: 500 });
     res.status(500).json({ message: 'Internal server error' });
   });
 
