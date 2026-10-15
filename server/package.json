@@ -10,8 +10,8 @@
     "build": "node --check src/app.js && node --check src/index.js && node --check src/createServer.js && node --check src/realtime/socketServer.js && node --check src/realtime/emitter.js && node --check src/services/summaryScheduler.js"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.32.1",
     "@agendajs/mongo-backend": "^4.0.3",
+    "@anthropic-ai/sdk": "^0.32.1",
     "agenda": "^6.2.6",
     "ajv": "^8.17.1",
     "bcryptjs": "^2.4.3",
@@ -20,6 +20,7 @@
     "express-rate-limit": "^7.4.1",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.9.3",
+    "nodemailer": "^10.1.1",
     "socket.io": "^4.8.1"
   },
   "devDependencies": {
