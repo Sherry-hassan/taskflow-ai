@@ -3,7 +3,19 @@ import * as authService from '../services/authService.js';
 
 const REFRESH_COOKIE_NAME = 'refreshToken';
 const CSRF_COOKIE_NAME = 'csrfToken';
-const COOKIE_PATH = '/api/v1/auth';
+const REFRESH_COOKIE_PATH = '/api/v1/auth';
+// Phase 3 fix: a cookie's Path also scopes which *pages* can read it via
+// document.cookie, not just which requests carry it. csrfToken is
+// non-httpOnly specifically so client JS can read its value and echo it as
+// the X-CSRF-Token header (the double-submit pattern, FR-008) — scoped to
+// '/api/v1/auth' like refreshToken, no real SPA page (which never lives
+// under that path) could ever read it, making the mechanism unusable by any
+// actual browser client. Broadening csrfToken's Path to '/' doesn't weaken
+// anything: it was already non-secret (non-httpOnly, meant to be read by
+// JS), and requireCsrf only ever validates it on /api/v1/auth/refresh and
+// /logout regardless of how broadly the browser attaches it. refreshToken
+// itself (the actually sensitive, httpOnly cookie) keeps its narrow path.
+const CSRF_COOKIE_PATH = '/';
 const REFRESH_TOKEN_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 // FR-007 requires the Secure attribute, which is correctly tied to whether the
@@ -20,7 +32,7 @@ function setAuthCookies(res, refreshToken) {
     httpOnly: true,
     secure: COOKIES_SECURE,
     sameSite: 'strict',
-    path: COOKIE_PATH,
+    path: REFRESH_COOKIE_PATH,
     maxAge: REFRESH_TOKEN_MAX_AGE_MS,
   });
   const csrfToken = crypto.randomBytes(16).toString('hex');
@@ -28,14 +40,14 @@ function setAuthCookies(res, refreshToken) {
     httpOnly: false,
     secure: COOKIES_SECURE,
     sameSite: 'strict',
-    path: COOKIE_PATH,
+    path: CSRF_COOKIE_PATH,
     maxAge: REFRESH_TOKEN_MAX_AGE_MS,
   });
 }
 
 function clearAuthCookies(res) {
-  res.clearCookie(REFRESH_COOKIE_NAME, { path: COOKIE_PATH });
-  res.clearCookie(CSRF_COOKIE_NAME, { path: COOKIE_PATH });
+  res.clearCookie(REFRESH_COOKIE_NAME, { path: REFRESH_COOKIE_PATH });
+  res.clearCookie(CSRF_COOKIE_NAME, { path: CSRF_COOKIE_PATH });
 }
 
 export async function signup(req, res) {

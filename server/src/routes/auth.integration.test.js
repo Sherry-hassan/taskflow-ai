@@ -89,6 +89,20 @@ describe('POST /auth/login (FR-002, FR-004, FR-007, US-002)', () => {
     expect(setCookie.some((c) => c.startsWith('csrfToken=') && !c.includes('HttpOnly'))).toBe(
       true,
     );
+
+    // Phase 3 regression: csrfToken must be readable via document.cookie from
+    // ANY page a real SPA renders, not just one literally served from
+    // /api/v1/auth — a Path scoped that narrowly makes the double-submit
+    // header unconstructable by any actual browser client (found when the
+    // Playwright harness's very first logout call failed with "CSRF token
+    // missing or invalid"). refreshToken, the sensitive httpOnly cookie,
+    // keeps its narrow path — only csrfToken's scope changed.
+    const refreshCookieHeader = setCookie.find((c) => c.startsWith('refreshToken='));
+    const csrfCookieHeader = setCookie.find((c) => c.startsWith('csrfToken='));
+    expect(refreshCookieHeader).toMatch(/Path=\/api\/v1\/auth/i);
+    // Path's value must be exactly "/" — not merely contain a leading slash,
+    // which "/api/v1/auth" also would.
+    expect(csrfCookieHeader).toMatch(/Path=\/(;|$)/i);
   });
 
   it('rejects wrong password and non-existent email with the identical generic message (US-002)', async () => {

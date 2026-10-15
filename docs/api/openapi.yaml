@@ -908,6 +908,7 @@ components:
         userId: { type: string }
         workspaceId: { type: string }
         role: { $ref: '#/components/schemas/Role' }
+        email: { type: string, format: email, description: 'Added Phase 3 — only present on the list-members response, to support a human-readable assignee picker client-side; the role-change/removal responses do not populate this.' }
 
     Invitation:
       type: object

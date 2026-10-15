@@ -5,12 +5,18 @@ import Anthropic from '@anthropic-ai/sdk';
 // (test-strategy.md §7) — tests mock this module's exported function.
 export class AIProviderError extends Error {}
 
+// ANTHROPIC_BASE_URL is an optional override, added for Phase 3's Playwright
+// E2E harness: when set, it points this client at a local fixture server
+// instead of the real Anthropic API, so no E2E run ever makes a real, paid
+// API call. Unset (the default, including in every existing Vitest test and
+// in a real deployment) leaves the SDK's own default endpoint untouched.
 function getClient() {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new Error('ANTHROPIC_API_KEY environment variable is not set');
   }
-  return new Anthropic({ apiKey });
+  const baseURL = process.env.ANTHROPIC_BASE_URL || undefined;
+  return new Anthropic({ apiKey, baseURL });
 }
 
 const MODEL = 'claude-sonnet-5';

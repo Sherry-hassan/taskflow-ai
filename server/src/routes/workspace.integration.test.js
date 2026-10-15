@@ -517,3 +517,26 @@ describe('Cross-workspace isolation (FR-013, NFR-006, US-019)', () => {
     ).expect(200);
   });
 });
+
+describe('GET /workspaces/:workspaceId/members — email field (Phase 3 addition)', () => {
+  it("includes each member's email alongside userId/workspaceId/role", async () => {
+    const ownerEmail = uniqueEmail('owner-email-check');
+    const owner = await signupAndGetToken(ownerEmail);
+    const wsRes = await authed(request(app).post('/api/v1/workspaces'), owner.accessToken)
+      .send({ name: 'Acme' })
+      .expect(201);
+
+    const res = await authed(
+      request(app).get(`/api/v1/workspaces/${wsRes.body.id}/members`),
+      owner.accessToken,
+    ).expect(200);
+
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0]).toMatchObject({
+      userId: owner.userId,
+      workspaceId: wsRes.body.id,
+      role: 'owner',
+      email: ownerEmail,
+    });
+  });
+});

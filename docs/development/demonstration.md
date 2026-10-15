@@ -44,8 +44,8 @@ POST /api/v1/workspaces/:workspaceId/invitations   (Owner or Admin only)
 
 An Admin attempting an `admin`-level invitation is rejected with `403`, server-side, regardless of what the client sends. Accepting an invitation (`POST /api/v1/invitations/:token/accept`) requires the authenticated caller's email to match the invited email — a stolen invitation link is not enough to join. A cross-workspace ID-guessing test confirms a member of Workspace A gets a denial, not a leak, when probing a known-valid ID that belongs to Workspace B.
 
-**What this proves about email**: `sendInvitationEmail` now calls a real SMTP adapter (`server/src/services/emailProvider.js`, added Phase 2) rather than doing nothing — see §8 for the dedicated proof of that behavior, including failure handling.
-**What this does not prove**: that a real recipient received the email. These tests intercept `sendInvitationEmail` itself (`vi.spyOn`) and assert it was called with the right recipient/token — they don't exercise the real SMTP path, and no automated test or verification step in this repository has ever sent a real email to a real inbox (see §8).
+**What this proves about email**: `sendInvitationEmail` now calls a real SMTP adapter (`server/src/services/emailProvider.js`, added Phase 2) rather than doing nothing — see §8 for the dedicated proof of that behavior, including failure handling. These Vitest-level tests intercept `sendInvitationEmail` itself (`vi.spyOn`) and assert it was called with the right recipient/token, not a real send.
+**What §9 adds**: Phase 3's `e2e/tests/invitation.spec.js` goes further — a real browser submits the invite form, a local SMTP catcher (not a mock; a real, local SMTP server) actually receives the real generated email, the test extracts the real link from it, and a second browser navigates there and accepts. No automated test anywhere in this repository has sent to a real, external recipient or used a real provider — see §9 for exactly what "real" means here.
 
 ## 3. Projects, tasks, and realtime collaboration
 
@@ -150,14 +150,30 @@ This swallow-and-log behavior is also exercised, unmodified, by the existing `au
 **What this proves**: delivery failures (misconfiguration, provider rejection, timeout) never change the API response, and never leak a recipient address, token, or provider error detail into logs.
 **What this does not prove**: that a real email reaches a real inbox. No automated test, and no verification step performed for this phase, opened a real SMTP connection or sent to a real recipient — that would require real provider credentials this repository does not have and was not authorized to use.
 
+## 9. Browser end-to-end journeys (Phase 3)
+
+Everything in sections 1–8 is proven at the Supertest/socket.io-client/Vitest level — real route/service code against a real database, but never through an actual rendered page. Phase 3 built a real app shell (`client/src/App.jsx` is no longer a placeholder — React Router, Tailwind, a real API client, a real `AuthContext`) and a Playwright harness (`e2e/`) that drives it in a real Chromium browser against the real server, real database, and the fixtures described below — no shortcuts, no backdoors.
+
+**What's mocked, and how** (`e2e/global-setup.js`):
+* **Anthropic**: `aiProvider.js`'s real code runs unmodified; only its `ANTHROPIC_BASE_URL` is pointed at a local fixture server (`e2e/fixtures/anthropicFixture.js`, a few lines of plain `http`) that returns a canned, test-controlled response shaped like the real Messages API. No real, paid API call is ever made.
+* **Email**: `emailProvider.js`'s real code runs unmodified; `SMTP_HOST`/`SMTP_PORT` point at a local SMTP catcher (`e2e/fixtures/smtpCatcher.js`, built on the `smtp-server` package) instead of a real provider. No real email is ever sent to a real recipient.
+* **Database**: a fresh, isolated `mongodb-memory-server` replica set per run — the same tooling the Vitest suite already uses, not a new mechanism.
+
+**Actually run, twice for stability, both clean — 8/8 passing**:
+
+| Journey | File | What it proves |
+|---|---|---|
+| Signup/login/logout | `auth.spec.js` | Protected routes redirect when unauthenticated; a page reload survives via silent refresh (no token in `localStorage`, confirmed by directly inspecting it) |
+| Core PM | `core-pm.spec.js` | Create workspace → project → task → change its status, through the real UI |
+| Realtime | `realtime.spec.js` | A task created in one browser context appears in a second, same project, with no reload — the actual Socket.IO round trip, not a mock |
+| Invitation | `invitation.spec.js` | Owner invites by email → the real email is captured from the local SMTP catcher → a second browser context accepts via the real link. This is the only legitimate way to drive this journey: the raw invitation token is never persisted anywhere except in the sent email (only its one-way hash is stored), so there is no API or database shortcut to it |
+| Authorization | `authorization.spec.js` | A Member sees no approve/reject controls in the UI, **and** a direct API probe (via Playwright's own request context, bypassing the UI entirely) independently gets `403` — proving the server enforces this, not just that a button is hidden |
+| AI plan approval/rejection | `ai-plan.spec.js` | Approving creates the proposed tasks on the real board; rejecting creates none — both checked by asserting on the task list, not just the artifact's `state` field |
+
+**Not built this phase** (deferred by explicit scope decision, not an oversight): AI risk/summary journeys, missed-realtime-event recovery, and the password-reset journey (no `/reset-password` page exists).
+
+**A real bug this harness found, not a pre-existing claim**: the CSRF cookie's `Path` was scoped to `/api/v1/auth`, which blocks `document.cookie` from ever seeing it on any page a real SPA renders (none of which live under that path) — found when the very first Playwright logout call failed with "CSRF token missing or invalid". Fixed in `authController.js` (CSRF cookie's `Path` widened to `/`; the sensitive httpOnly refresh cookie's path is untouched) and covered by a new regression test in `auth.integration.test.js` that reads the `Set-Cookie` header's `Path` attribute directly.
+
 ## What this demonstration does not cover
 
-No section above includes a screenshot of a rendered page, because **no such page exists to screenshot**. `client/src/App.jsx` is currently:
-
-```jsx
-function App() {
-  return <h1>TaskFlow AI</h1>;
-}
-```
-
-`LoginForm`, `SignupForm`, and `TaskCard` are real components with passing tests, but none is wired into a router or connected to the API client — there is no running application a browser could exercise beyond that placeholder heading. Every claim in this document is backed by a Supertest, socket.io-client, or Vitest test that calls the real route/service code against a real (test) database — not by a UI walkthrough. Building the app shell and the Playwright-based browser journeys defined in `docs/testing/test-strategy.md` §6 is explicitly out of scope for this phase of work.
+Password-reset still has no page — the API, email, and token-confirmation flow are proven (§1, §8), but there's no `/reset-password` UI for a browser journey to exercise. AI risk-assessment and progress-summary requests have real UI and real backend proof (§5, §6) but no Playwright journey. Missed-realtime-event recovery is proven at the hook level (`useProjectSocket` rejoins its room on every `connect` event, including reconnects) but not exercised via a real browser disconnect/reconnect. None of this is presented as covered — see `README.md`'s Current Limitations for the same list with the reasoning behind each deferral.

@@ -30,4 +30,15 @@ export default [
       'react/prop-types': 'off',
     },
   },
+  {
+    // Test files run under Vitest (Node), and vite.config.js itself is Node
+    // tooling config — both need Node globals (`global`, `process`) on top
+    // of the browser globals the app code itself runs under.
+    files: ['**/*.test.{js,jsx}', 'vite.config.js'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
+  },
 ];

@@ -1,6 +1,10 @@
 import mongoose from 'mongoose';
 import { Workspace } from '../models/Workspace.js';
 import { Membership } from '../models/Membership.js';
+// Not referenced directly — importing it registers the 'User' model with
+// Mongoose so listMembers' .populate('userId') can resolve it regardless of
+// module load order.
+import '../models/User.js';
 
 export class NotOwnerError extends Error {}
 export class CannotTargetOwnerError extends Error {}
@@ -23,12 +27,17 @@ export async function listWorkspacesForUser(userId) {
   }));
 }
 
+// Phase 3 addition: populates each member's email so the client can render a
+// human-readable member list / assignee picker — the API previously exposed
+// only raw userIds. Additive only: every field listMembers already returned
+// is unchanged; this adds `email` to the same response shape.
 export async function listMembers(workspaceId) {
-  const memberships = await Membership.find({ workspaceId });
+  const memberships = await Membership.find({ workspaceId }).populate('userId');
   return memberships.map((m) => ({
-    userId: m.userId.toString(),
+    userId: m.userId._id.toString(),
     workspaceId: m.workspaceId.toString(),
     role: m.role,
+    email: m.userId.email,
   }));
 }
 

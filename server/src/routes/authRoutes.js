@@ -16,6 +16,23 @@ function emailKeyGenerator(req) {
 // forever (observed directly: a "fresh app per test" did not reset rate limits,
 // because the router — and its limiters — were actually the same cached module
 // object every time). Each createApp() call now gets fully independent state.
+//
+// RATE_LIMIT_DISABLED is an explicit, opt-in escape hatch added for Phase 3's
+// Playwright harness: a full E2E run from one machine/IP would otherwise hit
+// these limiters' real thresholds and fail with spurious 429s unrelated to any
+// actual bug. Unset (the default — including production and every existing
+// Vitest test) leaves every limiter exactly as before; this never weakens
+// anything unless a process deliberately opts in.
+//
+// The NODE_ENV !== 'production' guard is a deliberate, code-level backstop
+// (not just a README warning): RATE_LIMIT_DISABLED is a real abuse-prevention
+// control per threat-model.md §4.1/§4.5, and an env var alone is one stray
+// deploy-config copy-paste away from silently disabling it in production. The
+// flag can only ever take effect outside production, regardless of what gets
+// set.
+const RATE_LIMITING_DISABLED =
+  process.env.RATE_LIMIT_DISABLED === 'true' && process.env.NODE_ENV !== 'production';
+
 export function createAuthRouter() {
   // FR-009, folded into M1 scope: /auth/login mirrors the same per-email AND
   // per-source-IP pattern already specified for password-reset — two independent
@@ -49,15 +66,21 @@ export function createAuthRouter() {
   });
 
   const router = Router();
+  const noop = (req, res, next) => next();
 
   router.post('/signup', asyncHandler(authController.signup));
-  router.post('/login', loginIpLimiter, loginEmailLimiter, asyncHandler(authController.login));
+  router.post(
+    '/login',
+    RATE_LIMITING_DISABLED ? noop : loginIpLimiter,
+    RATE_LIMITING_DISABLED ? noop : loginEmailLimiter,
+    asyncHandler(authController.login),
+  );
   router.post('/refresh', requireCsrf, asyncHandler(authController.refresh));
   router.post('/logout', requireCsrf, asyncHandler(authController.logout));
   router.post(
     '/password-reset/request',
-    resetIpLimiter,
-    resetEmailLimiter,
+    RATE_LIMITING_DISABLED ? noop : resetIpLimiter,
+    RATE_LIMITING_DISABLED ? noop : resetEmailLimiter,
     asyncHandler(authController.requestPasswordReset),
   );
   // No CSRF here — anonymous/token-authenticated, not cookie-authenticated (see

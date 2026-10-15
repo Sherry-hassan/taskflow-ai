@@ -7,7 +7,8 @@
   },
   "workspaces": [
     "client",
-    "server"
+    "server",
+    "e2e"
   ],
   "scripts": {
     "lint": "npm run lint --workspaces --if-present",
