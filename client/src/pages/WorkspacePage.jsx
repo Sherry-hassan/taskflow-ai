@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useOutletContext, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext.jsx';
 import { api } from '../api/client.js';
+import PageHeader from '../components/PageHeader.jsx';
+import Avatar from '../components/Avatar.jsx';
+import { FolderIcon, PlusIcon } from '../components/icons.jsx';
 
 export default function WorkspacePage() {
   const { workspaceId } = useParams();
   const { callWithAuth } = useAuth();
+  const openMobileNav = useOutletContext()?.openMobileNav;
+
   const [role, setRole] = useState(null);
   const [workspaceName, setWorkspaceName] = useState('');
   const [projects, setProjects] = useState(null);
@@ -76,113 +81,131 @@ export default function WorkspacePage() {
   }
 
   return (
-    <div>
-      <p className="mb-1 text-sm text-gray-500">
-        <Link to="/" className="hover:underline">
-          Workspaces
-        </Link>{' '}
-        /
-      </p>
-      <h2 className="mb-6 text-lg font-semibold text-gray-900">{workspaceName || 'Workspace'}</h2>
+    <>
+      <PageHeader
+        breadcrumbs={[{ label: 'Workspaces', to: '/' }, { label: workspaceName || 'Workspace' }]}
+        title={workspaceName || 'Workspace'}
+        onOpenMenu={openMobileNav}
+      />
 
-      {error && (
-        <p role="alert" className="mb-4 text-sm text-red-600">
-          {error}
-        </p>
-      )}
-
-      <section className="mb-8">
-        <h3 className="mb-2 font-medium text-gray-800">Projects</h3>
-        {canManage && (
-          <form onSubmit={handleCreateProject} className="mb-4 flex gap-2">
-            <label htmlFor="project-name" className="sr-only">
-              Project name
-            </label>
-            <input
-              id="project-name"
-              value={projectName}
-              onChange={(event) => setProjectName(event.target.value)}
-              placeholder="New project name"
-              required
-              className="flex-1 rounded border border-gray-300 px-3 py-2 text-sm"
-            />
-            <button
-              type="submit"
-              disabled={creatingProject}
-              className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-            >
-              Create
-            </button>
-          </form>
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6 sm:px-6">
+        {error && (
+          <p role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">
+            {error}
+          </p>
         )}
-        {projects === null && <p className="text-gray-500">Loading…</p>}
-        {projects !== null && projects.length === 0 && <p className="text-gray-500">No projects yet.</p>}
-        <ul className="space-y-2">
-          {projects?.map((project) => (
-            <li key={project.id}>
-              <Link
-                to={`/workspaces/${workspaceId}/projects/${project.id}`}
-                className="block rounded border border-gray-200 bg-white px-4 py-3 hover:border-blue-400"
-              >
-                <span className="font-medium text-gray-900">{project.name}</span>
-                {project.archived && <span className="ml-2 text-xs text-gray-400">archived</span>}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </section>
 
-      <section>
-        <h3 className="mb-2 font-medium text-gray-800">Members</h3>
-        {members === null && <p className="mb-4 text-gray-500">Loading…</p>}
-        <ul className="mb-4 space-y-1 text-sm text-gray-700">
-          {members?.map((member) => (
-            <li key={member.userId}>
-              {member.email} <span className="text-xs uppercase text-gray-400">{member.role}</span>
-            </li>
-          ))}
-        </ul>
+        <section className="mb-8">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-900">
+              Projects {projects !== null && <span className="text-slate-400">({projects.length})</span>}
+            </h2>
+          </div>
 
-        {canManage && (
-          <form onSubmit={handleInvite} className="flex flex-wrap items-end gap-2">
-            <div>
-              <label htmlFor="invite-email" className="block text-xs text-gray-500">
-                Email
+          {canManage && (
+            <form onSubmit={handleCreateProject} className="mb-4 flex flex-col gap-2 sm:flex-row">
+              <label htmlFor="project-name" className="sr-only">
+                Project name
               </label>
               <input
-                id="invite-email"
-                type="email"
-                value={inviteEmail}
-                onChange={(event) => setInviteEmail(event.target.value)}
+                id="project-name"
+                value={projectName}
+                onChange={(event) => setProjectName(event.target.value)}
+                placeholder="New project name"
                 required
-                className="rounded border border-gray-300 px-3 py-2 text-sm"
+                className="h-10 flex-1 rounded-lg border border-slate-300 px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
               />
-            </div>
-            <div>
-              <label htmlFor="invite-role" className="block text-xs text-gray-500">
-                Role
-              </label>
-              <select
-                id="invite-role"
-                value={inviteRole}
-                onChange={(event) => setInviteRole(event.target.value)}
-                className="rounded border border-gray-300 px-3 py-2 text-sm"
+              <button
+                type="submit"
+                disabled={creatingProject}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-4 text-sm font-semibold text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 disabled:cursor-not-allowed disabled:opacity-70"
               >
-                <option value="member">Member</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
-            <button
-              type="submit"
-              disabled={inviting}
-              className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-            >
-              Invite
-            </button>
-          </form>
-        )}
-        {inviteMessage && <p className="mt-2 text-sm text-gray-600">{inviteMessage}</p>}
-      </section>
-    </div>
+                <PlusIcon className="h-4 w-4" />
+                {creatingProject ? 'Creating…' : 'Create'}
+              </button>
+            </form>
+          )}
+
+          {projects === null && <p className="text-sm text-slate-500">Loading…</p>}
+          {projects !== null && projects.length === 0 && <p className="text-sm text-slate-500">No projects yet.</p>}
+
+          <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {projects?.map((project) => (
+              <li key={project.id}>
+                <Link
+                  to={`/workspaces/${workspaceId}/projects/${project.id}`}
+                  className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 transition-shadow hover:border-indigo-300 hover:shadow-md"
+                >
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+                    <FolderIcon className="h-5 w-5" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium text-slate-900">{project.name}</span>
+                    {project.archived && <span className="text-xs text-slate-400">Archived</span>}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section className="rounded-xl border border-slate-200 bg-white p-5">
+          <h2 className="mb-3 text-sm font-semibold text-slate-900">
+            Members {members !== null && <span className="text-slate-400">({members.length})</span>}
+          </h2>
+
+          {members === null && <p className="mb-4 text-sm text-slate-500">Loading…</p>}
+          <ul className="mb-5 divide-y divide-slate-100">
+            {members?.map((member) => (
+              <li key={member.userId} className="flex items-center gap-3 py-2 text-sm">
+                <Avatar email={member.email} size="sm" />
+                <span className="min-w-0 flex-1 truncate text-slate-700">{member.email}</span>
+                <span className="text-xs uppercase text-slate-400">{member.role}</span>
+              </li>
+            ))}
+          </ul>
+
+          {canManage && (
+            <form onSubmit={handleInvite} className="flex flex-wrap items-end gap-2 border-t border-slate-100 pt-4">
+              <div>
+                <label htmlFor="invite-email" className="mb-1 block text-xs font-medium text-slate-500">
+                  Email
+                </label>
+                <input
+                  id="invite-email"
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(event) => setInviteEmail(event.target.value)}
+                  required
+                  className="h-9 rounded-lg border border-slate-300 px-3 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                />
+              </div>
+              <div>
+                <label htmlFor="invite-role" className="mb-1 block text-xs font-medium text-slate-500">
+                  Role
+                </label>
+                <select
+                  id="invite-role"
+                  value={inviteRole}
+                  onChange={(event) => setInviteRole(event.target.value)}
+                  className="h-9 rounded-lg border border-slate-300 px-3 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                >
+                  <option value="member">Member</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <button
+                type="submit"
+                disabled={inviting}
+                className="inline-flex h-9 items-center justify-center rounded-lg bg-indigo-600 px-4 text-sm font-semibold text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {inviting ? 'Inviting…' : 'Invite'}
+              </button>
+            </form>
+          )}
+          {inviteMessage && <p className="mt-3 text-sm text-slate-600">{inviteMessage}</p>}
+        </section>
+      </main>
+    </>
   );
 }
