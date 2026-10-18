@@ -4,6 +4,8 @@ import ProtectedRoute from './auth/ProtectedRoute.jsx';
 import AppLayout from './components/AppLayout.jsx';
 import SignupPage from './pages/SignupPage.jsx';
 import LoginPage from './pages/LoginPage.jsx';
+import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx';
+import ResetPasswordPage from './pages/ResetPasswordPage.jsx';
 import WorkspacesPage from './pages/WorkspacesPage.jsx';
 import WorkspacePage from './pages/WorkspacePage.jsx';
 import ProjectPage from './pages/ProjectPage.jsx';
@@ -16,6 +18,8 @@ function App() {
         <Routes>
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route
             path="/"
             element={

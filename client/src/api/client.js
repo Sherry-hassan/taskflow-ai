@@ -60,6 +60,10 @@ export const api = {
   login: (email, password) => request('/auth/login', { method: 'POST', body: { email, password } }),
   refresh: () => request('/auth/refresh', { method: 'POST', csrf: true }),
   logout: () => request('/auth/logout', { method: 'POST', csrf: true }),
+  requestPasswordReset: (email) =>
+    request('/auth/password-reset/request', { method: 'POST', body: { email } }),
+  confirmPasswordReset: (token, newPassword) =>
+    request('/auth/password-reset/confirm', { method: 'POST', body: { token, newPassword } }),
 
   listWorkspaces: (accessToken) => request('/workspaces', { accessToken }),
   createWorkspace: (accessToken, name) =>

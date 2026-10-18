@@ -66,6 +66,11 @@ export default function ProjectPage() {
     onTaskUpdated: (task) =>
       setTasks((prev) => (prev ? prev.map((t) => (t.id === task.id ? task : t)) : prev)),
     onTaskDeleted: ({ id }) => setTasks((prev) => (prev ? prev.filter((t) => t.id !== id) : prev)),
+    // A dropped connection means any task:created/updated/deleted events the
+    // server emitted in the meantime were missed entirely — rejoining the
+    // room alone doesn't recover them. Re-running the same full load() a
+    // fresh mount uses is what actually catches this client back up.
+    onReconnected: load,
   });
 
   async function handleCreateTask(event) {

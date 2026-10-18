@@ -150,30 +150,33 @@ This swallow-and-log behavior is also exercised, unmodified, by the existing `au
 **What this proves**: delivery failures (misconfiguration, provider rejection, timeout) never change the API response, and never leak a recipient address, token, or provider error detail into logs.
 **What this does not prove**: that a real email reaches a real inbox. No automated test, and no verification step performed for this phase, opened a real SMTP connection or sent to a real recipient — that would require real provider credentials this repository does not have and was not authorized to use.
 
-## 9. Browser end-to-end journeys (Phase 3)
+## 9. Browser end-to-end journeys (Phase 3, extended Phase 4)
 
-Everything in sections 1–8 is proven at the Supertest/socket.io-client/Vitest level — real route/service code against a real database, but never through an actual rendered page. Phase 3 built a real app shell (`client/src/App.jsx` is no longer a placeholder — React Router, Tailwind, a real API client, a real `AuthContext`) and a Playwright harness (`e2e/`) that drives it in a real Chromium browser against the real server, real database, and the fixtures described below — no shortcuts, no backdoors.
+Everything in sections 1–8 is proven at the Supertest/socket.io-client/Vitest level — real route/service code against a real database, but never through an actual rendered page. Phase 3 built a real app shell (`client/src/App.jsx` is no longer a placeholder — React Router, Tailwind, a real API client, a real `AuthContext`) and a Playwright harness (`e2e/`) that drives it in a real Chromium browser against the real server, real database, and the fixtures described below — no shortcuts, no backdoors. Phase 4 closed the three journeys Phase 3 had deferred: AI risk/summary, password reset, and missed-realtime-event recovery.
 
 **What's mocked, and how** (`e2e/global-setup.js`):
 * **Anthropic**: `aiProvider.js`'s real code runs unmodified; only its `ANTHROPIC_BASE_URL` is pointed at a local fixture server (`e2e/fixtures/anthropicFixture.js`, a few lines of plain `http`) that returns a canned, test-controlled response shaped like the real Messages API. No real, paid API call is ever made.
 * **Email**: `emailProvider.js`'s real code runs unmodified; `SMTP_HOST`/`SMTP_PORT` point at a local SMTP catcher (`e2e/fixtures/smtpCatcher.js`, built on the `smtp-server` package) instead of a real provider. No real email is ever sent to a real recipient.
 * **Database**: a fresh, isolated `mongodb-memory-server` replica set per run — the same tooling the Vitest suite already uses, not a new mechanism.
 
-**Actually run, twice for stability, both clean — 8/8 passing**:
+**Actually run, twice for stability, both clean — 12/12 passing**:
 
 | Journey | File | What it proves |
 |---|---|---|
 | Signup/login/logout | `auth.spec.js` | Protected routes redirect when unauthenticated; a page reload survives via silent refresh (no token in `localStorage`, confirmed by directly inspecting it) |
 | Core PM | `core-pm.spec.js` | Create workspace → project → task → change its status, through the real UI |
 | Realtime | `realtime.spec.js` | A task created in one browser context appears in a second, same project, with no reload — the actual Socket.IO round trip, not a mock |
+| Realtime reconnect | `realtime-reconnect.spec.js` | A client whose connection is dropped (`context.setOffline`) while another session creates a task re-fetches and shows that task on reconnect, with no manual reload — the recovery path, not the live path `realtime.spec.js` already covers |
 | Invitation | `invitation.spec.js` | Owner invites by email → the real email is captured from the local SMTP catcher → a second browser context accepts via the real link. This is the only legitimate way to drive this journey: the raw invitation token is never persisted anywhere except in the sent email (only its one-way hash is stored), so there is no API or database shortcut to it |
+| Password reset | `password-reset.spec.js` | Request → the real email is captured from the local SMTP catcher → reset with the token → the pre-reset session's refresh token is independently probed against the API and rejected (`401`) → login with the new password succeeds |
 | Authorization | `authorization.spec.js` | A Member sees no approve/reject controls in the UI, **and** a direct API probe (via Playwright's own request context, bypassing the UI entirely) independently gets `403` — proving the server enforces this, not just that a button is hidden |
 | AI plan approval/rejection | `ai-plan.spec.js` | Approving creates the proposed tasks on the real board; rejecting creates none — both checked by asserting on the task list, not just the artifact's `state` field |
+| AI risk / summary | `ai-risk.spec.js`, `ai-summary.spec.js` | Requesting either shows a result immediately, with no approval step and no approve/reject control rendered anywhere — the generated-only lifecycle, end to end |
 
-**Not built this phase** (deferred by explicit scope decision, not an oversight): AI risk/summary journeys, missed-realtime-event recovery, and the password-reset journey (no `/reset-password` page exists).
+**Not built** (no remaining deferral from Phase 3's original list; these are the only ones left, both out of scope for different reasons): a second-browser-context realtime check for AI plan approval (the single-browser approval/rejection behavior above is already fully proven), and anything involving a real, paid Anthropic call or a real sent email (deliberately never exercised — see the mocking note above).
 
 **A real bug this harness found, not a pre-existing claim**: the CSRF cookie's `Path` was scoped to `/api/v1/auth`, which blocks `document.cookie` from ever seeing it on any page a real SPA renders (none of which live under that path) — found when the very first Playwright logout call failed with "CSRF token missing or invalid". Fixed in `authController.js` (CSRF cookie's `Path` widened to `/`; the sensitive httpOnly refresh cookie's path is untouched) and covered by a new regression test in `auth.integration.test.js` that reads the `Set-Cookie` header's `Path` attribute directly.
 
 ## What this demonstration does not cover
 
-Password-reset still has no page — the API, email, and token-confirmation flow are proven (§1, §8), but there's no `/reset-password` UI for a browser journey to exercise. AI risk-assessment and progress-summary requests have real UI and real backend proof (§5, §6) but no Playwright journey. Missed-realtime-event recovery is proven at the hook level (`useProjectSocket` rejoins its room on every `connect` event, including reconnects) but not exercised via a real browser disconnect/reconnect. None of this is presented as covered — see `README.md`'s Current Limitations for the same list with the reasoning behind each deferral.
+No production email provider account has ever been configured, and the Terms of Service/Privacy Policy drafts (`docs/legal/`) still need qualified legal review before public use. There is no deployment/production configuration — the Vite dev-server proxy that makes cookies/Socket.IO work in development is a dev-only mechanism, not a production topology decision. See `README.md`'s Current Limitations for the same list with the reasoning behind each.

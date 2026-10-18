@@ -13,7 +13,17 @@ export default defineConfig({
   // data with each other, so full parallelism is safe.
   fullyParallel: true,
   globalSetup: './global-setup.js',
-  timeout: 30000,
+  // Both bumped from the original 30000/5000 defaults: on a loaded dev
+  // machine (the real dev server + client already running, a real browser
+  // with many tabs open, etc.), signup's bcrypt hashing and a handful of
+  // sequential API round trips can genuinely take longer than the tight
+  // defaults assume — observed directly as previously-stable, unrelated
+  // journeys timing out under load, not a correctness regression. Matches
+  // this project's own precedent (server/vitest.config.js's hookTimeout)
+  // of widening a timeout to tolerate real local contention rather than
+  // masking it.
+  timeout: 60000,
+  expect: { timeout: 15000 },
   use: {
     baseURL: `http://localhost:${CLIENT_PORT}`,
     trace: 'retain-on-failure',

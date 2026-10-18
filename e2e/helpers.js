@@ -40,25 +40,50 @@ export async function setNextAiResponse(data) {
 }
 
 // Polls the local SMTP catcher's control API (see fixtures/smtpCatcher.js)
-// for the invitation email actually sent to `email`, and extracts the real
-// acceptance link/token from its body — the same information a real
-// recipient would see in their inbox. There is no shortcut around this: the
-// raw token is never stored anywhere retrievable except in the sent email.
-export async function waitForInvitationLink(email, { timeoutMs = 10000, intervalMs = 200 } = {}) {
+// for the most recent email actually sent to `email`, and extracts a link
+// from its body matching `linkRegex` — the same information a real recipient
+// would see in their inbox. There is no shortcut around this: for both the
+// invitation token and the password-reset token, only a one-way hash is ever
+// persisted server-side — the raw value exists nowhere else but the sent
+// email. `linkRegex`'s first capture group is returned as `token`.
+export async function waitForEmailLink(email, linkRegex, { timeoutMs = 10000, intervalMs = 200 } = {}) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const res = await fetch(`${process.env.E2E_SMTP_CONTROL_URL}/messages/${encodeURIComponent(email)}`);
     if (res.status === 200) {
       const { message } = await res.json();
       const body = message.text || message.html || '';
-      const match = body.match(/\/invitations\/([^/\s"'<]+)\/accept/);
+      const match = body.match(linkRegex);
       if (match) {
         return { token: match[1], link: match[0] };
       }
     }
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
-  throw new Error(`No invitation email captured for ${email} within ${timeoutMs}ms`);
+  throw new Error(`No email matching the expected link was captured for ${email} within ${timeoutMs}ms`);
+}
+
+export function waitForInvitationLink(email, options) {
+  return waitForEmailLink(email, /\/invitations\/([^/\s"'<]+)\/accept/, options);
+}
+
+export function waitForPasswordResetLink(email, options) {
+  return waitForEmailLink(email, /\/reset-password\?token=([^\s"'<]+)/, options);
+}
+
+// Shared by every spec that needs a workspace + project to work inside —
+// originally inline in ai-plan.spec.js, promoted here once a third spec
+// needed the identical setup.
+export async function createWorkspaceAndProject(page, label) {
+  const workspaceName = `${label}-WS ${Date.now()}`;
+  await page.getByLabel('Workspace name').fill(workspaceName);
+  await page.getByRole('button', { name: 'Create' }).click();
+  await page.getByRole('link', { name: new RegExp(workspaceName) }).click();
+
+  const projectName = `${label}-Project ${Date.now()}`;
+  await page.getByLabel('Project name').fill(projectName);
+  await page.getByRole('button', { name: 'Create' }).click();
+  await page.getByRole('link', { name: new RegExp(projectName) }).click();
 }
 
 export function apiBaseUrl() {

@@ -9,7 +9,7 @@ A MERN-stack project management application with AI-powered task planning, proje
 npm workspaces monorepo:
 * `server/` — Node.js + Express API, MongoDB/Mongoose, Socket.IO, AI orchestration (Anthropic Claude).
 * `client/` — React + Vite SPA (Tailwind CSS, React Router).
-* `e2e/` — Playwright browser tests, added Phase 3. Deliberately has no `lint`/`test`/`build` script, so it's invisible to the root `npm run lint`/`test`/`build` commands and to CI — run it directly (`cd e2e && npx playwright test`).
+* `e2e/` — Playwright browser tests, added Phase 3, extended Phase 4. Deliberately has no `lint`/`test`/`build` script, so it's invisible to the root `npm run lint`/`test`/`build` commands and to CI — run it directly (`cd e2e && npx playwright test`).
 * `docs/` — the nine approved specification documents this project is built from (product, architecture, security, testing, development), plus `docs/legal/` — draft, not-yet-legally-reviewed ToS/Privacy documents added in Phase 2 (see Current limitations).
 
 ## Architecture summary
@@ -31,10 +31,10 @@ Each feature below is marked by how it was actually verified — a real app shel
 | Projects and tasks (CRUD, assignment rules) | ✅ Verified | ✅ `TaskCard`, `ProjectPage` | ✅ Create project/task, change status |
 | Realtime task updates (Socket.IO) | ✅ Verified (via `socket.io-client` against a real server) | ✅ `useProjectSocket` hook | ✅ Task created in one browser context appears live in a second, without reload |
 | AI task planning (approval-required) | ✅ Verified | ✅ `ProjectPage`'s plan section | ✅ Both approval (tasks appear) and rejection (no tasks appear) |
-| AI risk analysis (generated-only) | ✅ Verified | ✅ `ProjectPage`'s risk section (request + read-only list) | ❌ Not built — deferred, see Current limitations |
-| AI progress summaries (on-demand + weekly scheduled) | ✅ Verified | ✅ `ProjectPage`'s summary section (request + read-only list) | ❌ Not built — deferred |
-| Password-reset journey (request → email → confirm) | ✅ Verified | ✅ `LoginForm`'s failure states | ❌ No UI page for reset-confirm exists yet; not built |
-| Missed-realtime-event recovery (disconnect/reconnect) | ✅ Verified at the hook level (`useProjectSocket` rejoins its room on every `connect` event, including reconnects) | — | ❌ Not built as a Playwright journey |
+| AI risk analysis (generated-only) | ✅ Verified | ✅ `ProjectPage`'s risk section (request + read-only list) | ✅ Request shows a result immediately, with no approval step |
+| AI progress summaries (on-demand + weekly scheduled) | ✅ Verified | ✅ `ProjectPage`'s summary section (request + read-only list) | ✅ Request shows a result immediately, with no approval step |
+| Password-reset journey (request → email → confirm) | ✅ Verified | ✅ `ForgotPasswordForm`, `ResetPasswordForm` | ✅ Real emailed link → new password → old session's refresh revoked → new password logs in |
+| Missed-realtime-event recovery (disconnect/reconnect) | ✅ Verified at the hook level (`useProjectSocket` rejoins its room on every `connect` event, including reconnects) | — | ✅ A dropped connection's missed task becomes visible on reconnect, with no manual reload |
 
 "React component" above means the component is both tested in isolation (Vitest/RTL) AND actually mounted into the real running app via the router — unlike in Phase 1/2, this is no longer two separate, disconnected claims.
 
@@ -51,7 +51,7 @@ Owner/Admin/Member roles, membership management, ownership transfer with a last-
 Project CRUD + archive (Owner/Admin only), task CRUD (any member may create), assignment restricted to existing workspace members, and a self-unassign-only boundary for a plain current assignee (reassigning to someone *else* requires the creator, Owner, or Admin).
 
 ### Realtime collaboration
-Socket.IO room per project; a client joins by emitting `join-project` and is authorized with the same workspace-role check the REST API uses. Task create/update/delete emit `task:created` / `task:updated` / `task:deleted` to everyone in that project's room, only after the database write is confirmed — never before. On reconnect, the client is expected to re-fetch rather than rely on a missed-event replay (documented v1 behavior, no event buffering).
+Socket.IO room per project; a client joins by emitting `join-project` and is authorized with the same workspace-role check the REST API uses. Task create/update/delete emit `task:created` / `task:updated` / `task:deleted` to everyone in that project's room, only after the database write is confirmed — never before. On reconnect, the client re-fetches current state (`useProjectSocket`'s `onReconnected` callback, wired to `ProjectPage`'s existing full-reload function) rather than relying on a missed-event replay — there is no event buffering, so anything emitted while disconnected is caught up this way instead.
 
 ### AI task planning (approval-required)
 A user requests a plan suggestion from a goal description; the Claude API's response is schema-validated before being stored. A schema-valid result becomes `pending_review` and must be explicitly approved or rejected by an Owner/Admin before any tasks are created. Approval re-checks the approver's role fresh at the moment of commit (not cached from request entry), revalidates the suggestion against the project's current state, and creates all proposed tasks atomically — a partial failure creates zero tasks and leaves the suggestion `pending_review`. Concurrent approve/approve or approve/reject races resolve to exactly one winner (409 for the loser).
@@ -118,7 +118,7 @@ Copy `server/.env.example` to `server/.env` and fill in real values locally — 
 | `ANTHROPIC_API_KEY` | Anthropic Claude API key, read only by `server/src/services/aiProvider.js`. Automated tests never call the real API — this is only needed to run the app for real. | M4 |
 | `OPERATOR_DIAGNOSTIC_TOKEN` | Shared secret for the restricted internal diagnostic route. A distinct operator credential, structurally unrelated to any workspace-role JWT. | M4 |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM` | SMTP configuration for the two transactional emails (password reset, invitation), read by `server/src/services/emailProvider.js`. If any is unset, sending fails safely (a caught, typed error, sanitized-logged) rather than throwing — the password-reset and invitation endpoints keep their existing response behavior either way. Never logged. | Phase 2 |
-| `APP_BASE_URL` | Base URL used to build the clickable link inside password-reset/invitation emails. The invitation link now resolves to a real page (`/invitations/:token/accept`, built in Phase 3); the password-reset link still doesn't — see Current limitations. | Phase 2 |
+| `APP_BASE_URL` | Base URL used to build the clickable link inside password-reset/invitation emails. Both links now resolve to a real page: `/invitations/:token/accept` (Phase 3) and `/reset-password?token=...` (Phase 4). | Phase 2 |
 | `ANTHROPIC_BASE_URL` | **Test/E2E-only — never set in a real deployment.** Overrides the Anthropic SDK client's base URL so Playwright can point `aiProvider.js` at a local fixture server instead of the real API. | Phase 3 |
 | `RATE_LIMIT_DISABLED` | **Test/E2E-only — never set in a real deployment.** When exactly `"true"`, disables the login/password-reset-request rate limiters, so a full Playwright run from one machine/IP doesn't trip real abuse-prevention limits. | Phase 3 |
 
@@ -176,11 +176,11 @@ npm audit
 
 Each command runs across the `client`/`server` workspaces via `--workspaces --if-present`. The `e2e` workspace (Playwright) is deliberately **not** included in any of these — it has no `lint`/`test`/`build` script, by design, so it never affects `npm test`/CI. Test levels and tooling are mapped to what each actually verifies in [`docs/testing/test-strategy.md`](docs/testing/test-strategy.md).
 
-**Verified in this repository, at commit `a7dbe50` plus this phase's uncommitted changes, 2026-10-15** (commands run directly, not inferred):
+**Verified in this repository, at commit `ba43204` plus this phase's uncommitted changes, 2026-10-15** (commands run directly, not inferred):
 * `npm run lint` → exit 0 (client + server)
 * `npm run build` → exit 0 (`client/dist/` produced, now including compiled Tailwind CSS and the router bundle; server syntax checks pass)
 * `npm audit` → 0 vulnerabilities
-* `npm test` → **144 server tests / 23 client tests, all passing** (server suite against a real replica-set MongoDB via `mongodb-memory-server`; client suite now covers `AuthContext`'s silent-refresh/retry-once logic and the API client, in addition to the original component tests — the Anthropic API and the SMTP email provider are both mocked everywhere; no automated test calls the real Claude API, opens a real SMTP connection, or sends a real email)
+* `npm test` → **147 server tests / 24 client tests, all passing**, run twice for stability (server suite against a real replica-set MongoDB via `mongodb-memory-server`; client suite covers `AuthContext`'s silent-refresh/retry-once logic and the API client, in addition to the original component tests — the Anthropic API and the SMTP email provider are both mocked everywhere; no automated test calls the real Claude API, opens a real SMTP connection, or sends a real email)
 
 ### End-to-end tests (Playwright)
 
@@ -192,15 +192,16 @@ npx playwright test
 
 `global-setup.js` starts everything the run needs and tears it all down afterward: an isolated `mongodb-memory-server` replica set, the real Express server (spawned from actual source, not a stub) with `ANTHROPIC_BASE_URL` pointed at a local fixture server (`fixtures/anthropicFixture.js` — a few lines of plain `http`, shaped like the real Anthropic Messages API) and `SMTP_HOST`/`PORT` pointed at a local SMTP catcher (`fixtures/smtpCatcher.js`), and the real Vite client. No real Claude API call, no real email, no real recipient, no paid service, ever.
 
-**Actually run, twice for stability, both clean — 8/8 passing**:
+**Actually run, twice for stability, both clean — 12/12 passing** (on a loaded local dev machine, individual journeys took anywhere from ~3s to ~60s between the two runs — see `playwright.config.js`'s `timeout`/`expect.timeout` comment; both runs passed regardless):
 * `auth.spec.js` — signup, login, protected-route redirect, logout, and session survival across a reload (silent refresh)
 * `core-pm.spec.js` — create workspace → project → task → change its status
 * `realtime.spec.js` — a task created in one browser context appears in a second, same project, without a reload
+* `realtime-reconnect.spec.js` — a client disconnected (simulated via `context.setOffline`) while another session creates a task reconnects and shows that task with no manual reload — proving the reconnect-triggered re-fetch, not just the live-socket path `realtime.spec.js` already covers
 * `invitation.spec.js` — Owner invites a Member by email; the invited user accepts via the **real link captured from the local SMTP catcher** (the raw token is never persisted anywhere else — only its one-way hash is — so this is the only legitimate way to drive this journey as a real browser flow)
+* `password-reset.spec.js` — request → **real link captured from the local SMTP catcher** → reset → the pre-reset session's refresh token is independently probed and rejected (`401`) → login with the new password succeeds
 * `authorization.spec.js` — a Member sees no approve/reject controls, **and** a direct API probe (bypassing the UI, via Playwright's own request context) independently gets `403`
 * `ai-plan.spec.js` (two tests) — approving a plan suggestion creates its tasks; rejecting one creates none
-
-**Not built** (see [Current limitations](#current-limitations) for why): AI risk/summary journeys, missed-realtime-event recovery, and the password-reset journey.
+* `ai-risk.spec.js` / `ai-summary.spec.js` — requesting each shows a result immediately, with no approval step or control rendered anywhere
 
 Full per-milestone verification history, including bugs found and fixed during implementation, is in [`docs/development/progress.md`](docs/development/progress.md).
 
@@ -208,9 +209,6 @@ Full per-milestone verification history, including bugs found and fixed during i
 
 Stated plainly, with the evidence behind each:
 
-* **The password-reset page doesn't exist.** The API, the email, and the token-confirmation flow all work (verified by `auth.integration.test.js`), but there is no `/reset-password` route or form in the app shell — `APP_BASE_URL`'s reset link 404s. Only the invitation-accept link got a real page in Phase 3.
-* **AI risk-assessment and progress-summary journeys have no Playwright coverage.** The UI exists (`ProjectPage`'s request buttons + read-only lists) and the backend is fully tested, but no browser journey drives them end-to-end — deferred by explicit scope decision when Phase 3 was planned, to keep the E2E harness's first pass focused on the journeys named as priorities.
-* **Missed-realtime-event recovery has no Playwright coverage.** `useProjectSocket` does rejoin its room on every `connect` event (including reconnects), which is the mechanism this behavior depends on, but no test simulates a disconnect/reconnect in a real browser and asserts the reconnected client re-fetches current state.
 * **No production email provider account or Terms of Service/Privacy Policy legal review exists.** `server/src/services/emailProvider.js` (Nodemailer over SMTP) is real and tested against a local SMTP catcher in E2E, but no real SMTP account has ever been configured or used. [`docs/legal/terms-of-service.md`](docs/legal/terms-of-service.md) and [`docs/legal/privacy-policy.md`](docs/legal/privacy-policy.md) are generated drafts grounded in the actual implementation, explicitly labeled as requiring qualified legal review before public use — several fields (governing law, privacy contact, retention policy) are left as placeholders because no such decision has been made.
 * **No deployment/production configuration exists.** The Vite dev-server proxy that makes cookies/Socket.IO work in development is a dev-only mechanism, not a production topology decision — there's no build step wiring the client and server together for a real deployment, no process manager config, no reverse-proxy/TLS setup. Deploying was explicitly out of scope for this phase.
 * **Deliberately out of v1 scope** (not bugs): a concrete real-time latency SLA, workspace deletion, and permanent project deletion — see `docs/development/implementation-plan.md` §10.

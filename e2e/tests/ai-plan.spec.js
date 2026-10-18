@@ -1,17 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { setNextAiResponse, signupAndLogin, uniqueEmail } from '../helpers.js';
-
-async function createWorkspaceAndProject(page, label) {
-  const workspaceName = `${label}-WS ${Date.now()}`;
-  await page.getByLabel('Workspace name').fill(workspaceName);
-  await page.getByRole('button', { name: 'Create' }).click();
-  await page.getByRole('link', { name: new RegExp(workspaceName) }).click();
-
-  const projectName = `${label}-Project ${Date.now()}`;
-  await page.getByLabel('Project name').fill(projectName);
-  await page.getByRole('button', { name: 'Create' }).click();
-  await page.getByRole('link', { name: new RegExp(projectName) }).click();
-}
+import { createWorkspaceAndProject, setNextAiResponse, signupAndLogin, uniqueEmail } from '../helpers.js';
 
 test('approving a plan suggestion creates its proposed tasks', async ({ page }) => {
   await signupAndLogin(page, uniqueEmail('e2e-plan-approve'), 'correct-horse-battery-staple');
