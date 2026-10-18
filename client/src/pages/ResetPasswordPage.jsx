@@ -1,4 +1,5 @@
 import { Link, useSearchParams } from 'react-router-dom';
+import AuthLayout from '../components/AuthLayout.jsx';
 import ResetPasswordForm from '../components/ResetPasswordForm.jsx';
 import { api } from '../api/client.js';
 
@@ -14,20 +15,19 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
-      <div className="w-full max-w-sm rounded-lg bg-white p-8 shadow">
-        <h1 className="mb-6 text-xl font-semibold text-gray-900">Choose a new password</h1>
-        {token ? (
-          <ResetPasswordForm onSubmit={handleSubmit} />
-        ) : (
-          <p role="alert">This link is missing its reset token.</p>
-        )}
-        <p className="mt-4 text-sm text-gray-500">
-          <Link to="/login" className="text-blue-600 hover:underline">
-            Back to log in
-          </Link>
+    <AuthLayout heading="Choose a new password" subtitle="Your new password must be different from previous ones.">
+      {token ? (
+        <ResetPasswordForm onSubmit={handleSubmit} />
+      ) : (
+        <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">
+          This link is missing its reset token.
         </p>
-      </div>
-    </div>
+      )}
+      <p className="mt-6 text-center text-sm text-slate-500">
+        <Link to="/login" className="font-medium text-indigo-600 hover:text-indigo-700">
+          Back to log in
+        </Link>
+      </p>
+    </AuthLayout>
   );
 }

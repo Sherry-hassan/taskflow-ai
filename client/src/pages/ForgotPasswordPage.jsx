@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import AuthLayout from '../components/AuthLayout.jsx';
 import ForgotPasswordForm from '../components/ForgotPasswordForm.jsx';
 import { api } from '../api/client.js';
 
@@ -8,16 +9,13 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
-      <div className="w-full max-w-sm rounded-lg bg-white p-8 shadow">
-        <h1 className="mb-6 text-xl font-semibold text-gray-900">Reset your password</h1>
-        <ForgotPasswordForm onSubmit={handleSubmit} />
-        <p className="mt-4 text-sm text-gray-500">
-          <Link to="/login" className="text-blue-600 hover:underline">
-            Back to log in
-          </Link>
-        </p>
-      </div>
-    </div>
+    <AuthLayout heading="Reset your password" subtitle="Enter your email and we'll send you a reset link.">
+      <ForgotPasswordForm onSubmit={handleSubmit} />
+      <p className="mt-6 text-center text-sm text-slate-500">
+        <Link to="/login" className="font-medium text-indigo-600 hover:text-indigo-700">
+          Back to log in
+        </Link>
+      </p>
+    </AuthLayout>
   );
 }

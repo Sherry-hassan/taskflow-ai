@@ -19,7 +19,7 @@ describe('App', () => {
 
   it('redirects an unauthenticated visitor to the login page', async () => {
     render(<App />);
-    const heading = await screen.findByRole('heading', { name: 'Log in' });
+    const heading = await screen.findByRole('heading', { name: 'Welcome back' });
     expect(heading).toBeInTheDocument();
   });
 });

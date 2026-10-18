@@ -1,4 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
+import AuthLayout from '../components/AuthLayout.jsx';
 import SignupForm from '../components/SignupForm.jsx';
 import { useAuth } from '../auth/AuthContext.jsx';
 
@@ -12,17 +13,14 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
-      <div className="w-full max-w-sm rounded-lg bg-white p-8 shadow">
-        <h1 className="mb-6 text-xl font-semibold text-gray-900">Create your account</h1>
-        <SignupForm onSubmit={handleSubmit} />
-        <p className="mt-4 text-sm text-gray-500">
-          Already have an account?{' '}
-          <Link to="/login" className="text-blue-600 hover:underline">
-            Log in
-          </Link>
-        </p>
-      </div>
-    </div>
+    <AuthLayout heading="Create your account" subtitle="Start planning projects and turning ideas into action.">
+      <SignupForm onSubmit={handleSubmit} />
+      <p className="mt-6 text-center text-sm text-slate-500">
+        Already have an account?{' '}
+        <Link to="/login" className="font-medium text-indigo-600 hover:text-indigo-700">
+          Log in
+        </Link>
+      </p>
+    </AuthLayout>
   );
 }
