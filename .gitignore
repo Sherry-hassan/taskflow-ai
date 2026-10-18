@@ -9,3 +9,10 @@ coverage/
 e2e/test-results/
 e2e/playwright-report/
 e2e/.cache/
+
+# Local-only dev fixtures (stand in for real Mongo/Anthropic/SMTP creds
+# during local testing) and their generated output — never application code.
+server/devMongo.mjs
+server/devAnthropicFixture.mjs
+server/devEmailCatcher.mjs
+server/dev-mongo-uri.txt
