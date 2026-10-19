@@ -16,3 +16,5 @@ server/devMongo.mjs
 server/devAnthropicFixture.mjs
 server/devEmailCatcher.mjs
 server/dev-mongo-uri.txt
+server/.local-mongo-data/
+server/.local-mongo.log
