@@ -1,9 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { AIProviderError } from './aiProviderError.js';
+import { callOllama } from './ollamaProvider.js';
 
-// The sole code path in this application that calls the Claude API
+// The sole code path in this application that calls an AI model
 // (system-design.md §12). Never called for real in any automated test
 // (test-strategy.md §7) — tests mock this module's exported function.
-export class AIProviderError extends Error {}
+export { AIProviderError };
 
 // ANTHROPIC_BASE_URL is an optional override, added for Phase 3's Playwright
 // E2E harness: when set, it points this client at a local fixture server
@@ -22,7 +24,7 @@ function getClient() {
 const MODEL = 'claude-sonnet-5';
 const MAX_TOKENS = 2048;
 
-export async function callClaude(prompt) {
+async function callAnthropic(prompt) {
   try {
     const client = getClient();
     const response = await client.messages.create({
@@ -38,4 +40,21 @@ export async function callClaude(prompt) {
     // Anthropic SDK's own error shape directly.
     throw new AIProviderError(err.message);
   }
+}
+
+// AI_PROVIDER selects the backend this exported callClaude() delegates to.
+// Unset (the default, matching every existing deployment and test) keeps the
+// Anthropic path unchanged. "ollama" is a local-development-only option
+// (docs/legal/privacy-policy.md and terms-of-service.md commit production to
+// Anthropic; this is intentionally not the default) that routes to a locally
+// running Ollama instance instead — see ollamaProvider.js.
+export async function callClaude(prompt) {
+  const provider = process.env.AI_PROVIDER || 'anthropic';
+  if (provider === 'ollama') {
+    return callOllama(prompt);
+  }
+  if (provider !== 'anthropic') {
+    throw new AIProviderError(`Unknown AI_PROVIDER "${provider}" (expected "anthropic" or "ollama")`);
+  }
+  return callAnthropic(prompt);
 }

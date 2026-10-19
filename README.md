@@ -121,6 +121,10 @@ Copy `server/.env.example` to `server/.env` and fill in real values locally — 
 | `APP_BASE_URL` | Base URL used to build the clickable link inside password-reset/invitation emails. Both links now resolve to a real page: `/invitations/:token/accept` (Phase 3) and `/reset-password?token=...` (Phase 4). | Phase 2 |
 | `ANTHROPIC_BASE_URL` | **Test/E2E-only — never set in a real deployment.** Overrides the Anthropic SDK client's base URL so Playwright can point `aiProvider.js` at a local fixture server instead of the real API. | Phase 3 |
 | `RATE_LIMIT_DISABLED` | **Test/E2E-only — never set in a real deployment.** When exactly `"true"`, disables the login/password-reset-request rate limiters, so a full Playwright run from one machine/IP doesn't trip real abuse-prevention limits. | Phase 3 |
+| `AI_PROVIDER` | **Local-development-only — leave unset in any real deployment**, which stays committed to Anthropic (`docs/legal/privacy-policy.md`, `terms-of-service.md`). Unset/`"anthropic"` (default) keeps `aiProvider.js`'s `callClaude()` calling the real Anthropic API; `"ollama"` routes all three AI features to a locally running Ollama instance instead (see `OLLAMA_*` below), and does not require `ANTHROPIC_API_KEY` to be set. | Ollama integration |
+| `OLLAMA_BASE_URL` | Base URL of the local Ollama server. Defaults to `http://127.0.0.1:11434` if unset. Only read when `AI_PROVIDER=ollama`. | Ollama integration |
+| `OLLAMA_MODEL` | Ollama model name used for all three AI features. Defaults to `qwen3:8b` if unset. Must already be pulled locally (`ollama pull <model>`). Only read when `AI_PROVIDER=ollama`. | Ollama integration |
+| `OLLAMA_TIMEOUT_MS` | Per-request timeout (ms) for calls to the local Ollama server. Defaults to `60000` if unset. Only read when `AI_PROVIDER=ollama`. | Ollama integration |
 
 `client/` has no `.env.example` — it consumes no secrets; `e2e/` reads no `.env` file at all (its env vars are generated and injected entirely by `global-setup.js`).
 
@@ -162,6 +166,34 @@ npm run start --workspace server
 ```sh
 npm run dev --workspace client
 ```
+
+### Optional: run the three AI features against local Ollama instead of Anthropic (Windows)
+
+Local-development-only (see `AI_PROVIDER` above) — production stays on Anthropic. PowerShell commands:
+
+```powershell
+# 1. Check Ollama is installed
+ollama --version
+
+# 2. Start the local Ollama service (if `ollama serve` isn't already running as a
+#    background service after install, run this in its own terminal and leave it open)
+ollama serve
+
+# 3. In a separate terminal, pull the model and verify it's present
+ollama pull qwen3:8b
+ollama list
+
+# 4. Configure the backend — in server/.env set:
+#      AI_PROVIDER=ollama
+#      OLLAMA_BASE_URL=http://127.0.0.1:11434
+#      OLLAMA_MODEL=qwen3:8b
+#    ANTHROPIC_API_KEY can stay unset.
+
+# 5. Start MongoDB (see "Local MongoDB replica-set setup" above) and then the server
+npm run start --workspace server
+```
+
+If `ollama pull`/`ollama list` isn't recognized, install Ollama for Windows first, then re-open the terminal so `PATH` picks up the new binary.
 
 Serves the real app shell (signup/login/workspaces/projects/tasks/AI panels) at `http://localhost:5173`, proxying `/api` and `/socket.io` to the server above.
 
