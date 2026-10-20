@@ -208,7 +208,9 @@ npm audit
 
 Each command runs across the `client`/`server` workspaces via `--workspaces --if-present`. The `e2e` workspace (Playwright) is deliberately **not** included in any of these — it has no `lint`/`test`/`build` script, by design, so it never affects `npm test`/CI. Test levels and tooling are mapped to what each actually verifies in [`docs/testing/test-strategy.md`](docs/testing/test-strategy.md).
 
-**Verified in this repository, at commit `ba43204` plus this phase's uncommitted changes, 2026-10-15** (commands run directly, not inferred):
+**Last full-suite verification recorded in this repository: commit `5d4b8bc` (dashboard redesign), 2026-10-18** — see `docs/development/progress.md`'s Phase 5 changelog entry for the exact commands run and their results (client lint/vitest/build all exit 0, 24/24 client tests; the 12-journey Playwright set passing 12/12 with `--workers=1`). That entry supersedes the snapshot below, which remains here as the point-in-time record for commit `ba43204` specifically. Commits since `5d4b8bc` — `e1eff03` (email template styling), `a5dec4d` (optional Ollama backend), and `2272386` (MongoDB connection-timeout fix) — have not yet had a fresh full-suite (`npm test`, Playwright) re-run recorded in `progress.md`; treat their correctness as implemented-and-lint-clean, not yet re-verified end-to-end.
+
+**Historical snapshot — verified at commit `ba43204` plus that phase's uncommitted changes, 2026-10-15** (commands run directly, not inferred):
 * `npm run lint` → exit 0 (client + server)
 * `npm run build` → exit 0 (`client/dist/` produced, now including compiled Tailwind CSS and the router bundle; server syntax checks pass)
 * `npm audit` → 0 vulnerabilities

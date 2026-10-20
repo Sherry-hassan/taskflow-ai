@@ -1,10 +1,11 @@
 # TaskFlow AI — Product Requirements Document (PRD)
 
 Status: **Approved**
-Version: 0.4
+Version: 0.5
 
 ## 0. Revision history
 
+* **0.5** — Product decision (2026-10-19): a dedicated settings/account page is explicitly out of scope for v1 (added to §4.2). No other scope change — task creation/update/delete/assign was already approved in v1 via FR-031 and §4.1; that capability exists in the backend (`taskController.deleteTask`) but has no client UI yet, which is an implementation gap, not a scope question, and does not require a PRD change.
 * **0.4** — Product decision: resolved FR-106's "3 attempts" ambiguity as 3 total attempts (1 initial + 2 retries), per explicit user confirmation on 2026-10-10. Propagated to `user-stories.md`, `system-design.md`, `database-design.md`, `test-strategy.md`, `threat-model.md`, `implementation-plan.md`, and `progress.md` — the only documents that referenced the ambiguity. No other requirement changed.
 * **0.3** — Final consistency pass: tightened invitation authority/revocation scope and added email normalization (FR-090–093); hardened plan-suggestion approval with fresh server-side authorization, atomic single-use transitions, duplicate prevention, and pre-creation revalidation against the project's current state (FR-052–056); resolved FR-123 to archiving-only in v1 (no permanent project deletion); extended password reset with account-enumeration-safe generic responses, rate limiting, secure single-use tokens, and post-reset session revocation (FR-009); clarified that invalid AI output is retained only for restricted diagnostics, never shown to ordinary users, and never logged with raw/sensitive content (FR-125); removed a dead clause in FR-022 that was unreachable after FR-020 restricted project creation to Owner/Admin. All requirement IDs from v0.2 are preserved; new requirements use previously-unused ID ranges.
 * **0.2** — Revised per reviewer clarifications: split AI artifact lifecycles (plan approval vs. generated-only risk/summary artifacts); added a secure invitation flow and reconciled it with the no-notifications exclusion; defined full role-authority/ownership-transfer/last-Owner rules; specified authentication token lifecycle (expiry, rotation, revocation, storage, CSRF) and the password-reset/email-verification scope decision; removed the ambiguous "configurable" project-creation setting and added task-assignment rules; defined scheduled-summary eligibility, cadence, dedup, and retry; added AI data governance (storage, access, minimization, retention); labeled unresolved performance claims explicitly instead of asserting unsupported numbers. All requirement IDs from v0.1 are preserved; new requirements use previously-unused ID ranges (see each subsection) rather than renumbering existing ones.
@@ -63,6 +64,7 @@ All of the following ship in v1. Delivery order (foundation first, AI features l
 * Billing/subscription management.
 * Mobile native apps (web/responsive only).
 * Cross-workspace reporting or search.
+* A dedicated settings/account page (e.g. profile editing, password change outside the reset flow, notification preferences). Decided out of scope for v1 on 2026-10-19 — no such page exists in the current implementation and none is planned for v1.
 
 ## 5. Functional requirements
 

@@ -127,6 +127,31 @@ export default function ProjectPage() {
     }
   }
 
+  async function handleDeleteTask(taskId) {
+    setError('');
+    try {
+      await callWithAuth(api.deleteTask, workspaceId, projectId, taskId);
+      // The task:deleted socket event (already wired above) removes this for
+      // every connected client, including this one — this filter is a
+      // same-tick, idempotent mirror of that so the card disappears even if
+      // this socket hasn't (re)joined the room yet.
+      setTasks((prev) => (prev ? prev.filter((t) => t.id !== taskId) : prev));
+    } catch (err) {
+      if (err.status === 404) {
+        // Already gone (e.g. deleted from another tab/session) — treat as
+        // success rather than showing an error for something the user's
+        // click already achieved in effect.
+        setTasks((prev) => (prev ? prev.filter((t) => t.id !== taskId) : prev));
+        return;
+      }
+      setError(err.message || 'Failed to delete task');
+      // Re-thrown so TaskCard's dialog knows the attempt failed (it only
+      // uses this to stop showing "Deleting…" — the error itself is
+      // surfaced via the banner above, not by the dialog).
+      throw err;
+    }
+  }
+
   async function handleRequestPlan(event) {
     event.preventDefault();
     setPlanError('');
@@ -276,6 +301,7 @@ export default function ProjectPage() {
               currentRole={role}
               membersByEmail={membersByEmail}
               onStatusChange={handleStatusChange}
+              onDelete={handleDeleteTask}
             />
           )}
         </section>

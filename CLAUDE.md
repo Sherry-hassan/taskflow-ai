@@ -8,16 +8,36 @@ TaskFlow AI is a production-oriented MERN-stack project management application w
 
 ## Project status
 
-This repository is currently empty. No application code or architecture has been implemented yet. The first milestone is creating and reviewing specification documents under spec-driven development. Do not create the application scaffold or implement features until specs exist and are approved.
+The specification phase is complete (all nine core specs approved — see below) and v1's full planned scope (milestones M0–M7) is implemented and verified, plus several unplanned, user-directed extensions (real email delivery, a full React app shell, Playwright E2E coverage, UI/UX redesign passes, an optional local Ollama AI backend). Current, detailed status lives in `docs/development/progress.md` — treat that file, not this paragraph, as the source of truth for what's actually Done versus in progress at any given time.
 
-## Planned technology stack
+This is an active, substantially-built MERN application, not an empty scaffold. Do not re-create or reinitialize any part of the application structure described below.
 
-These technologies are planned, not yet implemented:
+## Authoritative specifications
+
+Before making any change, read `docs/README.md` for the full documentation index. The authoritative source for each concern is:
+
+* **Product**: `docs/product/prd.md` (requirements, scope, acceptance criteria) and `docs/product/user-stories.md`.
+* **Architecture**: `docs/architecture/system-design.md` and `docs/architecture/database-design.md`.
+* **API contract**: `docs/api/openapi.yaml`.
+* **Security**: `docs/security/threat-model.md`.
+* **Testing**: `docs/testing/test-strategy.md`.
+* **Implementation plan**: `docs/development/implementation-plan.md`.
+* **Current status/changelog**: `docs/development/progress.md` (the living log — update this one as work is done; it does not require re-approval for routine status updates, only for structural changes, and only after `implementation-plan.md` is revised first).
+
+A document's own header states its approval status (Draft / Pending review / Approved) and version — check it directly rather than assuming.
+
+## Before making changes
+
+* Inspect the current working tree (`git status`, `git log`) and the actual source files relevant to the task — do not assume behavior from a specification alone.
+* Identify which approved spec(s) and requirement IDs the task maps to.
+* If a requirement is missing, ambiguous, or a spec conflicts with the actual code, say so and ask rather than inventing behavior.
+
+## Technology stack (implemented)
 
 * **Frontend**: React, Vite, JavaScript, Tailwind CSS
 * **Backend**: Node.js, Express.js, JavaScript
-* **Database**: MongoDB with Mongoose
-* **AI**: Anthropic Claude API
+* **Database**: MongoDB with Mongoose (replica-set required for multi-document transactions)
+* **AI**: Anthropic Claude API (default/production provider); an optional local Ollama backend is available for dev-only use (see `AI_PROVIDER` in `server/.env.example`) — never silently switch providers or introduce paid API usage
 * **Real-time collaboration**: Socket.IO
 * **Testing**: Vitest, React Testing Library, Supertest, Playwright
 

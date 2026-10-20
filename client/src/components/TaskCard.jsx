@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import Avatar from './Avatar.jsx';
 import Badge from './Badge.jsx';
-import { CalendarIcon, SparkleIcon } from './icons.jsx';
+import ConfirmDialog from './ConfirmDialog.jsx';
+import { CalendarIcon, SparkleIcon, TrashIcon } from './icons.jsx';
 
 // UX-layer mirror of the server's authority rule (FR-031) — this is a
 // convenience, NOT the enforcement: the server independently re-checks this
@@ -24,19 +26,55 @@ function formatDueDate(dueDate) {
 // itself only carries assigneeId (server/src/models/Task.js), so the parent
 // (ProjectPage) resolves it against the already-loaded members list. Never
 // required — the component degrades cleanly without it.
-export default function TaskCard({ task, currentUserId, currentRole, onStatusChange, assigneeEmail }) {
+export default function TaskCard({ task, currentUserId, currentRole, onStatusChange, onDelete, assigneeEmail }) {
   const canModify = hasTaskAuthority(task, currentUserId, currentRole);
   const dueLabel = formatDueDate(task.dueDate);
+
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleConfirmDelete() {
+    if (deleting) {
+      // Prevents a duplicate request if Delete is somehow activated twice
+      // (e.g. a stray keyboard repeat) before the first request resolves.
+      return;
+    }
+    setDeleting(true);
+    try {
+      await onDelete(task.id);
+    } catch {
+      // Swallowed here deliberately: the parent (ProjectPage) is already
+      // responsible for surfacing the error via its own banner. This
+      // dialog's only job on failure is to stop showing "Deleting…" and
+      // close, not to also report the error itself or leave an unhandled
+      // rejection from this click handler.
+    } finally {
+      setDeleting(false);
+      setConfirmOpen(false);
+    }
+  }
 
   return (
     <div className="group rounded-xl border border-slate-200 bg-white p-3.5 transition-shadow hover:shadow-md focus-within:ring-2 focus-within:ring-indigo-500/30">
       <span className="mb-2 flex items-start justify-between gap-2">
         <h3 className="text-sm font-medium leading-snug text-slate-900">{task.title}</h3>
-        {task.aiOriginated && (
-          <span title="Created from an approved AI task plan" className="shrink-0 text-indigo-500">
-            <SparkleIcon className="h-4 w-4" />
-          </span>
-        )}
+        <span className="flex shrink-0 items-center gap-1.5">
+          {task.aiOriginated && (
+            <span title="Created from an approved AI task plan" className="text-indigo-500">
+              <SparkleIcon className="h-4 w-4" />
+            </span>
+          )}
+          {canModify && (
+            <button
+              type="button"
+              aria-label={`Delete ${task.title}`}
+              onClick={() => setConfirmOpen(true)}
+              className="rounded-md p-1 text-slate-400 hover:bg-red-50 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500/30"
+            >
+              <TrashIcon className="h-4 w-4" />
+            </button>
+          )}
+        </span>
       </span>
 
       {task.description && (
@@ -78,6 +116,16 @@ export default function TaskCard({ task, currentUserId, currentRole, onStatusCha
           </p>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title={`Delete "${task.title}"?`}
+        description="This cannot be undone."
+        confirmLabel="Delete"
+        confirming={deleting}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </div>
   );
 }

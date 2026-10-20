@@ -32,4 +32,18 @@ test('core PM journey: workspace, project, task, status change', async ({ page }
   const statusSelect = taskCard.getByLabel(new RegExp(`Status for ${taskTitle}`));
   await statusSelect.selectOption('in_progress');
   await expect(statusSelect).toHaveValue('in_progress');
+
+  // Delete: confirm the dialog gates the request (Cancel makes no change),
+  // then actually deletes and confirms the card is gone from the board —
+  // the authorized-deletion + real-time-removal path (FR-031).
+  await taskCard.getByLabel(new RegExp(`Delete ${taskTitle}`)).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(page.getByText(taskTitle)).toBeVisible();
+
+  await taskCard.getByLabel(new RegExp(`Delete ${taskTitle}`)).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
+  await expect(page.getByText(taskTitle)).toHaveCount(0);
 });

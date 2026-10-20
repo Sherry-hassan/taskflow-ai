@@ -1,6 +1,6 @@
 # TaskFlow AI — Project Demonstration
 
-This document walks through what TaskFlow AI actually does, using only evidence that exists in this repository today: real API routes, real schemas, and the real automated tests that exercise them. It does not describe a browser-based demo, because none exists yet — see the final section for exactly what is and isn't covered.
+This document walks through what TaskFlow AI actually does, using only evidence that exists in this repository today: real API routes, real schemas, and the real automated tests that exercise them. Sections 1–8 focus on API-level evidence (Supertest/Vitest/socket.io-client, against a real database) deliberately, since that's the layer where request/response shapes and schema validation are easiest to show concretely. A real browser-based demo does exist — a React app shell driven end-to-end by Playwright — and is covered separately in §9, rather than repeated inline for every flow. See the final section for exactly what is and isn't covered.
 
 For the approved requirements each feature traces back to, see `docs/product/prd.md` and `docs/product/user-stories.md`. For the architecture behind these flows, see `docs/architecture/system-design.md` and `docs/architecture/database-design.md`. For the full API contract, see `docs/api/openapi.yaml`.
 
@@ -26,7 +26,7 @@ POST /api/v1/auth/login
 The access token is returned in the body; the refresh token and CSRF token are set as cookies (httpOnly/Secure/SameSite for the refresh cookie), not returned in the body. `POST /api/v1/auth/refresh` and `/auth/logout` require a matching `X-CSRF-Token` header against that cookie or respond `403`. A refresh token can only be used once — using an already-consumed one revokes the entire token family, verified by an integration test that fires two concurrent refresh requests with the same token and asserts exactly one succeeds.
 
 **What this proves**: the full session lifecycle, CSRF rejection, and the concurrent-refresh race resolve exactly as `system-design.md` §4 specifies — against a real database, not a mock.
-**What this does not prove**: that a real browser can complete this flow through `LoginForm`/`SignupForm` — those components are tested in isolation (jsdom), never mounted into a page that calls these endpoints.
+**Also proven at the browser level**: `e2e/tests/auth.spec.js` drives this same flow through the real `LoginForm`/`SignupForm` components mounted in the real app, in a real Chromium browser — see §9.
 
 ## 2. Workspaces, roles, and invitations
 
@@ -66,7 +66,7 @@ POST /api/v1/workspaces/:workspaceId/projects/:projectId/tasks
 Realtime: a socket client joins a project's room by emitting `join-project` with the `projectId`; the server runs the same workspace-membership check the REST API uses before allowing the join. Once a task is created/updated/deleted via the REST API, every socket in that project's room (`project:<projectId>`) receives `task:created` / `task:updated` / `task:deleted` — and only after the database write is confirmed, never speculatively before it.
 
 **What this proves**: the realtime event actually fires in response to a real database write, verified by a real socket client receiving it over a real connection — not a mocked emitter.
-**What this does not prove**: that a rendered task board shows this update live in a browser. `TaskCard` (the one realtime-adjacent UI component) is tested in isolation and never mounted into a page subscribed to these events.
+**Also proven at the browser level**: `e2e/tests/realtime.spec.js` and `realtime-reconnect.spec.js` show a rendered task board (`TaskCard` mounted on `ProjectPage`, subscribed to these events) updating live in one browser context when a task is created in another, and recovering via re-fetch after a dropped connection — see §9.
 
 ## 4. AI task planning (approval-required)
 
@@ -90,7 +90,7 @@ Two failure categories are tested separately, per `system-design.md` §9:
 
 Approval (`POST .../ai/plans/:artifactId/approve`, Owner/Admin only) re-checks the approver's role fresh inside the same transaction that performs the state transition, revalidates the suggestion against the project's current state (e.g. rejects with `422` if the project was archived in the meantime), and creates every proposed task atomically — verified by a test that injects a failure partway through a multi-task batch and asserts zero tasks persist. Two simultaneous approval requests against the same suggestion resolve to exactly one `200` and one `409`, never both succeeding.
 
-**What this does not prove**: that a human reviewer approves a suggestion through a UI. There is no plan-review screen; the approve/reject endpoints are only exercised directly via Supertest.
+**Also proven at the browser level**: `e2e/tests/ai-plan.spec.js` drives approval and rejection through the real plan-review UI (`ProjectPage`'s plan section / `AiPlanPanel`), asserting on the resulting task list, not just the artifact's `state` field — see §9.
 
 ## 5. AI risk analysis
 
