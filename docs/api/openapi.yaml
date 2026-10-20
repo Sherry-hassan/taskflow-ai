@@ -621,6 +621,11 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: Task not found in this project (FR-031).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
   # ───────────────────────────── AI task planning (FR-050–056) ─────────────────────────────
 
