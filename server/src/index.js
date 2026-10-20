@@ -22,9 +22,14 @@ async function main() {
 }
 
 main().catch((err) => {
-  // Never err.message here: a MongoDB connection failure's message can embed
-  // the connection string itself (credentials included) — the same
-  // sanitized-logging discipline as logAppError, applied at startup.
-  console.error('Failed to start server:', err.name || 'Error');
+  // err.message is safe to log only for our own MongoConnectionError (connection.js
+  // builds it from an explicit field allow-list) — any other error's message/stack
+  // could echo request content or the raw connection string, so stays unlogged,
+  // matching logAppError's sanitized-logging discipline.
+  if (err.name === 'MongoConnectionError') {
+    console.error('Failed to start server:', err.message);
+  } else {
+    console.error('Failed to start server:', err.name || 'Error');
+  }
   process.exitCode = 1;
 });
