@@ -12,6 +12,10 @@ const variantClasses = {
   severity_high: 'bg-red-50 text-red-700 ring-1 ring-inset ring-red-200',
   severity_medium: 'bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200',
   severity_low: 'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200',
+  priority_highest: 'bg-red-50 text-red-700 ring-1 ring-inset ring-red-200',
+  priority_high: 'bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200',
+  priority_medium: 'bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200',
+  priority_low: 'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200',
   ai: 'bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-200',
   neutral: 'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200',
 };

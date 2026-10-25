@@ -1,12 +1,13 @@
 # TaskFlow AI — User Stories
 
-Status: **Approved**
-Version: 0.3
-Baseline: `docs/product/prd.md` v0.4 (**Approved** — confirmed against the current file at time of this revision)
+Status: **Pending review** *(v0.3 is Approved; v0.4's additions below are Draft pending your approval)*
+Version: 0.4
+Baseline: `docs/product/prd.md` v0.6 (v0.5 **Approved**; v0.6's FR-130–134 are Draft pending approval — see §0 there)
 
 > Note on path: the request named `docs/products/user-stories.md` (plural "products"); this file is created at `docs/product/user-stories.md` (singular) to match the existing `docs/product/prd.md` directory. Flag if a separate `docs/products/` path was actually intended.
 
 **Revision history**
+* **0.4** *(Draft, pending approval)* — Jira-style task fields (2026-10-24): added US-130–134 for PRD FR-130–134 (priority, start date, labels, date-range validation, priority/due-date filter and sort). No existing US renumbered.
 * **0.3** — Propagated PRD v0.4's FR-106 resolution (3 total attempts) into US-060; no other change.
 * **0.2** — Targeted consistency pass against PRD v0.3: added concurrency ACs for simultaneous plan approve/reject (US-048/049); clarified self-assignee reassignment limits (US-039); distinguished validated output from restricted raw-diagnostic output, including for Owner/Admin (US-063/066); added missing positive/negative ownership-transfer and Admin-removal cases (US-027/029) and flagged an ambiguous PRD clause (FR-093); matched the PRD's stated retry count exactly (US-060); added FR-124 and NFR-003 coverage (US-067, US-068) and reviewed remaining NFR coverage in the traceability note. No existing US ID was renumbered.
 * **0.1** — Initial draft.
@@ -159,7 +160,7 @@ As a workspace Owner, I want a project's AI plan/risk/summary history to remain 
 
 **US-035** — Create a task (FR-030)
 As a workspace member with project access, I want to create a task, so that I can track a unit of work.
-* Given I have access to the project, when I submit a title (and optional description, status, due date, assignee), then the task is created.
+* Given I have access to the project, when I submit a title (and optional description, status, priority, start date, due date, assignee, labels), then the task is created.
 
 **US-036** — Update or delete a task I own, am assigned to, or administer (FR-031)
 As a task's creator, assignee, or a workspace Owner/Admin, I want to update or delete that task, so that work stays accurate without giving everyone blanket edit rights.
@@ -180,6 +181,30 @@ As a task's creator, its current assignee, or a workspace Owner/Admin, I want to
 * Given I am the current assignee and I am **not** also the creator or Owner/Admin, when I unassign myself (set the assignee to none), then it succeeds.
 * Given I am the current assignee and I am **not** also the creator or Owner/Admin, when I attempt to reassign the task to a *different* person (not simply unassigning myself), then it is rejected — assignee-only authority covers self-unassignment, not reassignment to someone else.
 * Given I am an unrelated Member (not the creator, not the current assignee, not Owner/Admin), when I attempt to assign, reassign, or unassign the task, then it is rejected.
+
+**US-130** *(Draft)* — Set a task's priority (FR-130)
+As a workspace member who can update a task, I want to set its priority to Low, Medium, High, or Highest, so that urgency is visible at a glance.
+* Given I create a task without specifying a priority, when it is saved, then its priority defaults to Medium.
+* Given I submit an unrecognized priority value, when I create or update a task, then it is rejected with a clear error.
+
+**US-131** *(Draft)* — Set a task's start date (FR-131)
+As a workspace member who can update a task, I want to optionally set a start date alongside its due date, so that I can see the full planned timeframe of the work.
+* Given I create or update a task with a start date, when it is saved, then the start date is persisted and shown alongside the due date.
+* Given a task has no start date, when I view it, then it displays normally with no start date shown (existing tasks are unaffected).
+
+**US-132** *(Draft)* — Label a task (FR-132)
+As a workspace member who can update a task, I want to add free-text labels to it, so that I can categorize work in a way that fits my team without a predefined taxonomy.
+* Given I add one or more labels to a task, when it is saved, then the labels are persisted and displayed on the task.
+
+**US-133** *(Draft)* — Due date cannot precede start date (FR-133)
+As the system, I need to prevent a task's due date from being earlier than its start date, so that the task's planned timeframe is never self-contradictory.
+* Given a task has (or is being given) both a start date and a due date, when the due date is earlier than the start date, then the create or update is rejected with a clear error and no change is persisted.
+
+**US-134** *(Draft)* — Filter and sort tasks by priority or due date (FR-134)
+As a workspace member viewing a project's task board, I want to filter tasks by priority and sort them by priority or due date, so that I can quickly see what's most urgent.
+* Given a project has tasks of mixed priority, when I filter by a specific priority, then only tasks of that priority are shown.
+* Given a project has tasks with mixed due dates, when I sort by due date, then tasks are ordered soonest-due first, with tasks that have no due date ordered last.
+* Given a project has tasks of mixed priority, when I sort by priority, then tasks are ordered Highest → Lowest (not alphabetically).
 
 ## F. Real-time collaboration
 
@@ -320,4 +345,4 @@ If a future PRD revision adds or changes an FR/NFR, the corresponding US should 
 
 ## Approval
 
-**Approved by the user on 2026-10-09.** This document (v0.2) is a baseline, alongside `docs/product/prd.md` v0.3, for `docs/architecture/system-design.md` and all subsequent specification documents, per the project's spec-driven development workflow.
+**Approved by the user on 2026-10-09.** This document (v0.2) is a baseline, alongside `docs/product/prd.md` v0.3, for `docs/architecture/system-design.md` and all subsequent specification documents, per the project's spec-driven development workflow. **v0.4's US-130–134 are Draft, pending your explicit approval**, mirroring PRD v0.6's FR-130–134.

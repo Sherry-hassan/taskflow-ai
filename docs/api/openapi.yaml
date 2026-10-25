@@ -1,6 +1,8 @@
 # TaskFlow AI — API Contract
 #
-# Status: Approved
+# Status: Approved, except the Task.priority/startDate/labels additions below (TaskPriority schema,
+#         Task/TaskCreateRequest/TaskUpdateRequest's new fields) — those are Draft, pending approval,
+#         mirroring PRD v0.6 FR-130–134 (Draft) / database-design.md v0.4 (Draft).
 # Version: 0.1 (this document's own revision, distinct from info.version below)
 # Baseline: docs/product/prd.md v0.3 (Approved), docs/product/user-stories.md v0.2 (Approved),
 #           docs/architecture/system-design.md v0.2 (Approved), docs/architecture/database-design.md v0.1 (Approved)
@@ -562,7 +564,9 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Task' }
         '400':
-          description: Proposed assignee is not a member of this workspace (FR-033).
+          description: >
+            Proposed assignee is not a member of this workspace (FR-033); or an invalid priority value;
+            or dueDate earlier than startDate; or malformed labels.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -601,7 +605,9 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Task' }
         '400':
-          description: Proposed assignee is not a workspace member (FR-033).
+          description: >
+            Proposed assignee is not a workspace member (FR-033); or an invalid priority value; or
+            dueDate earlier than startDate; or malformed labels.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -941,6 +947,13 @@ components:
         Database-design.md §8's resolved v1 enum. Transitions are unrestricted — any status may move to
         any other (e.g. reopening a `done` task back to `todo` is allowed).
 
+    TaskPriority:
+      type: string
+      enum: [low, medium, high, highest]
+      description: >
+        Database-design.md §8 revision. Explicit rank order low < medium < high < highest (not
+        alphabetical) is used for sorting. Defaults to `medium` when not supplied.
+
     Task:
       type: object
       properties:
@@ -951,7 +964,13 @@ components:
         description: { type: string }
         status: { $ref: '#/components/schemas/TaskStatus' }
         assigneeId: { type: string, nullable: true }
-        dueDate: { type: string, format: date-time, nullable: true }
+        priority: { $ref: '#/components/schemas/TaskPriority' }
+        startDate: { type: string, format: date, nullable: true, description: Date-only; no time-of-day component. }
+        dueDate: { type: string, format: date, nullable: true, description: Date-only; no time-of-day component. }
+        labels:
+          type: array
+          items: { type: string }
+          description: Free-text tags, max 10, 30 characters each.
         aiOriginated: { type: boolean }
         sourceArtifactId: { type: string, nullable: true }
 
@@ -963,7 +982,12 @@ components:
         description: { type: string }
         status: { $ref: '#/components/schemas/TaskStatus' }
         assigneeId: { type: string, nullable: true, description: Must be an existing member of this workspace (FR-033). }
-        dueDate: { type: string, format: date-time, nullable: true }
+        priority: { $ref: '#/components/schemas/TaskPriority' }
+        startDate: { type: string, format: date, nullable: true }
+        dueDate: { type: string, format: date, nullable: true, description: Must not be earlier than startDate, if both are set. }
+        labels:
+          type: array
+          items: { type: string }
 
     TaskUpdateRequest:
       type: object
@@ -972,7 +996,12 @@ components:
         description: { type: string }
         status: { $ref: '#/components/schemas/TaskStatus' }
         assigneeId: { type: string, nullable: true, description: Setting this to null is a self-unassign if the caller is the current assignee (FR-034); setting it to a different user requires creator/Owner/Admin authority. }
-        dueDate: { type: string, format: date-time, nullable: true }
+        priority: { $ref: '#/components/schemas/TaskPriority' }
+        startDate: { type: string, format: date, nullable: true }
+        dueDate: { type: string, format: date, nullable: true, description: Must not be earlier than the task's (possibly also-updated) startDate. }
+        labels:
+          type: array
+          items: { type: string }
 
     # AI artifacts: validatedOutput's exact shape (per-type) is intentionally left generic here — the
     # concrete plan/risk/summary output schema is an implementation-plan-level detail once the AI

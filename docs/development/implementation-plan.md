@@ -1,10 +1,11 @@
 # TaskFlow AI — Implementation Plan
 
-Status: **Approved**
-Version: 0.2
-Baseline: `docs/product/prd.md` v0.4 (Approved), `docs/product/user-stories.md` v0.3 (Approved), `docs/architecture/system-design.md` v0.3 (Approved), `docs/architecture/database-design.md` v0.2 (Approved), `docs/api/openapi.yaml` (Approved), `docs/security/threat-model.md` v0.2 (Approved), `docs/testing/test-strategy.md` v0.2 (Approved)
+Status: **Pending review** *(v0.2 is Approved; v0.3's §10 Phase 6 below is Draft pending your approval)*
+Version: 0.3
+Baseline: `docs/product/prd.md` v0.6 (v0.5 Approved; FR-130–134 Draft), `docs/product/user-stories.md` v0.4 (v0.3 Approved; US-130–134 Draft), `docs/architecture/system-design.md` v0.3 (Approved), `docs/architecture/database-design.md` v0.4 (v0.3 Approved; Draft fields), `docs/api/openapi.yaml` (Approved, except the matching Draft fields), `docs/security/threat-model.md` v0.2 (Approved), `docs/testing/test-strategy.md` v0.4 (v0.3 Approved; Draft rows)
 
 **Revision history**
+* **0.3** *(Draft, pending approval)* — Added §10, Phase 6 (Jira-style task fields), following the same unplanned-phase precedent as Phases 1–5 in `docs/development/progress.md`. Renumbered the old §10 (non-goals) to §11; no content in it changed.
 * **0.2** — Added concrete npm-workspaces tooling decision and M0 verification commands, with the build step (syntax-only) explicitly distinguished from a dedicated server-startup smoke test; moved login rate-limiting into M1's scope and exit criteria (flagging that `test-strategy.md` doesn't yet define that test, as a follow-up, not fixed here); firmed up M7's security-gap table into explicit mandatory/deferred dispositions, with an explicit carve-out preserving the AI-governance audit trail and `DiagnosticAccessLog` as already-mandatory and unaffected by the general-audit-log deferral; resolved FR-106's retry-bound ambiguity in M6 per PRD v0.4. `.env.example` scoping corrected so M0 only requires variables M0 itself uses (`MONGODB_URI`/`PORT`), with JWT/email/Anthropic variables added incrementally by the milestone that introduces each feature.
 * **0.1** — Initial draft.
 
@@ -134,10 +135,23 @@ M0 (scaffold) → M1 (auth) → M2 (workspaces & roles) → M3 (projects, tasks,
 
 **Exit criteria**: full test suite run and passing; `docs/development/progress.md` reflects every milestone as complete with its actual verification evidence, not an assumed state.
 
-## 10. Explicit non-goals for this plan
+## 10. Phase 6 — Jira-style task fields (unplanned, post-M7, Draft)
+
+**Context**: M0–M7 are all Done (`docs/development/progress.md`), and several unplanned phases (1–5) already followed that same precedent for user-directed work outside the original nine-milestone scope. This is the next such phase: PRD FR-130–134 / user-stories US-130–134 (Draft, pending approval) add task priority, start date, labels, a due-date-not-before-start-date rule, and priority/due-date filtering and sorting on the task board.
+
+**Closes** (once the above specs are approved): FR-130–134, US-130–134.
+
+**Scope**:
+* Backend: `Task` model gains `priority` (enum, default `medium`), `startDate` (Date, optional), `labels` (`[String]`, default `[]`); `taskService.js` validates priority/date-range/labels and extends `createTask`/`updateTask`/`toDto`; `taskController.js` passes the new fields through; `openapi.yaml`'s `Task`/`TaskCreateRequest`/`TaskUpdateRequest` schemas and a new `TaskPriority` enum.
+* Frontend: a new shared `TaskForm` component (replacing the 2-field inline create form) used for both creation and a net-new edit flow (no edit UI existed before this phase); `TaskCard` gains a priority badge, label chips, start-date display, and overdue due-date styling; a priority filter and due-date/priority sort toolbar on the project task board (client-side, no new backend query params).
+* Tests: Unit/API-integration coverage in `server/src/routes/project.integration.test.js` for priority/date-range/labels validation and authorization; Component coverage in `TaskCard.test.jsx`/`TaskForm.test.jsx` for the new display and form behavior.
+
+**Exit criteria**: the backend and frontend test suites actually run and pass (see `docs/development/progress.md` for the executed commands and results); lint and build pass; `docs/development/progress.md` records this phase; the PRD/user-stories/database-design/openapi/test-strategy Draft additions above are either approved or explicitly still pending at the time this phase is recorded as done — the code was written ahead of that approval, at the user's explicit direction, and that sequencing is flagged here rather than presented as the normal order.
+
+## 11. Explicit non-goals for this plan
 
 Consistent with every earlier document's carried-forward open items, this plan does **not** schedule work for: a concrete real-time latency SLA (`NFR-005`, still unresolved), workspace deletion (PRD never committed to it), or permanent project deletion (`PRD` §4.2 — archiving only in v1). None of these are silently assumed in-scope for any milestone above.
 
 ## Approval
 
-**Approved by the user on 2026-10-09.** This document (v0.1) is a baseline, alongside `docs/product/prd.md` v0.3, `docs/product/user-stories.md` v0.2, `docs/architecture/system-design.md` v0.2, `docs/architecture/database-design.md` v0.1, `docs/api/openapi.yaml`, `docs/security/threat-model.md` v0.1, and `docs/testing/test-strategy.md` v0.1, for `docs/development/progress.md` — the last of the nine specification documents — per the project's spec-driven development workflow.
+**Approved by the user on 2026-10-09.** This document (v0.1) is a baseline, alongside `docs/product/prd.md` v0.3, `docs/product/user-stories.md` v0.2, `docs/architecture/system-design.md` v0.2, `docs/architecture/database-design.md` v0.1, `docs/api/openapi.yaml`, `docs/security/threat-model.md` v0.1, and `docs/testing/test-strategy.md` v0.1, for `docs/development/progress.md` — the last of the nine specification documents — per the project's spec-driven development workflow. **§10 (Phase 6) is Draft, pending your explicit approval**, consistent with the Draft status of the FR-130–134/US-130–134 requirements it closes.

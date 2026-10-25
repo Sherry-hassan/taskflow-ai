@@ -7,6 +7,11 @@ import mongoose from 'mongoose';
 // doesn't describe a workflow requiring restricted transitions.
 export const TASK_STATUSES = ['todo', 'in_progress', 'done'];
 
+// Jira-style task fields (database-design.md §8 revision). Explicit rank order
+// (not alphabetical) so callers can sort by priority: low < medium < high < highest.
+export const TASK_PRIORITIES = ['low', 'medium', 'high', 'highest'];
+export const TASK_PRIORITY_RANK = Object.fromEntries(TASK_PRIORITIES.map((p, i) => [p, i]));
+
 const taskSchema = new mongoose.Schema(
   {
     // Denormalized from Project, not only derivable via projectId → Project.workspaceId
@@ -22,7 +27,13 @@ const taskSchema = new mongoose.Schema(
     // natively validate "this ID exists in a different collection with a matching
     // workspaceId" as a schema rule).
     assigneeId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    priority: { type: String, enum: TASK_PRIORITIES, required: true, default: 'medium' },
+    // Date-only values (no time-of-day): stored as UTC midnight of the chosen
+    // calendar date so ordering/overdue comparisons never drift across
+    // timezones (database-design.md §8 revision).
+    startDate: { type: Date, default: null },
     dueDate: { type: Date, default: null },
+    labels: { type: [String], default: [] },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     // Set true only for tasks created via an approved plan suggestion (FR-052, M4).
     aiOriginated: { type: Boolean, required: true, default: false },
@@ -34,5 +45,6 @@ const taskSchema = new mongoose.Schema(
 taskSchema.index({ workspaceId: 1, projectId: 1 });
 taskSchema.index({ assigneeId: 1 });
 taskSchema.index({ projectId: 1, status: 1 });
+taskSchema.index({ projectId: 1, priority: 1 });
 
 export const Task = mongoose.model('Task', taskSchema);

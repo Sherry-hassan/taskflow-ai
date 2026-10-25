@@ -1,10 +1,11 @@
 # TaskFlow AI — Product Requirements Document (PRD)
 
-Status: **Approved**
-Version: 0.5
+Status: **Pending review** *(v0.5 is Approved; v0.6's additions below are Draft pending your approval)*
+Version: 0.6
 
 ## 0. Revision history
 
+* **0.6** *(Draft, pending approval)* — Jira-style task fields (2026-10-24): adds task **priority** (FR-130), **start date** (FR-131), and **labels** (FR-132), plus a date-range validation rule (FR-133) and priority/due-date filtering and sorting on the task board (FR-134). FR-030's field list is updated accordingly. No existing FR is renumbered or removed; new requirements use the previously-unused FR-130–134 range.
 * **0.5** — Product decision (2026-10-19): a dedicated settings/account page is explicitly out of scope for v1 (added to §4.2). No other scope change — task creation/update/delete/assign was already approved in v1 via FR-031 and §4.1; that capability exists in the backend (`taskController.deleteTask`) but has no client UI yet, which is an implementation gap, not a scope question, and does not require a PRD change.
 * **0.4** — Product decision: resolved FR-106's "3 attempts" ambiguity as 3 total attempts (1 initial + 2 retries), per explicit user confirmation on 2026-10-10. Propagated to `user-stories.md`, `system-design.md`, `database-design.md`, `test-strategy.md`, `threat-model.md`, `implementation-plan.md`, and `progress.md` — the only documents that referenced the ambiguity. No other requirement changed.
 * **0.3** — Final consistency pass: tightened invitation authority/revocation scope and added email normalization (FR-090–093); hardened plan-suggestion approval with fresh server-side authorization, atomic single-use transitions, duplicate prevention, and pre-creation revalidation against the project's current state (FR-052–056); resolved FR-123 to archiving-only in v1 (no permanent project deletion); extended password reset with account-enumeration-safe generic responses, rate limiting, secure single-use tokens, and post-reset session revocation (FR-009); clarified that invalid AI output is retained only for restricted diagnostics, never shown to ordinary users, and never logged with raw/sensitive content (FR-125); removed a dead clause in FR-022 that was unreachable after FR-020 restricted project creation to Owner/Admin. All requirement IDs from v0.2 are preserved; new requirements use previously-unused ID ranges.
@@ -44,7 +45,7 @@ All of the following ship in v1. Delivery order (foundation first, AI features l
 * Authentication: email/password sign-up, login, logout, JWT access + refresh tokens with rotation, and password reset via email (narrow transactional capability — see §4.2, FR-009, FR-095).
 * Workspaces: create workspace, invite/remove members via a secure invitation flow, assign/change roles within the authority rules in FR-096–099, workspace-level data isolation.
 * Projects: create/update/archive projects within a workspace (creation restricted to Owner/Admin — FR-020).
-* Tasks: create/update/delete/assign/complete tasks within a project, with assignment restricted to workspace members (FR-033/034), status and due-date tracking.
+* Tasks: create/update/delete/assign/complete tasks within a project, with assignment restricted to workspace members (FR-033/034), status/priority/start-date/due-date tracking, and free-text labels (FR-130–134, Draft pending approval).
 * Real-time collaboration: live updates to task boards (create/update/move/delete, assignment changes) via Socket.IO for all workspace members currently viewing a project.
 * AI task planning: given a project goal/description, propose a structured breakdown of tasks; requires Owner/Admin approval before tasks are created, with safeguards against stale/duplicate approval (FR-050–056).
 * AI risk analysis: given a project's current tasks/status/history, produce a structured, directly-viewable risk assessment (no approval step — it never modifies data) (FR-060–061).
@@ -113,11 +114,16 @@ Each requirement has a stable ID (`FR-xxx`) referenced by later specs (user stor
 * **FR-022**: *(revised wording, same ID — removes a dead clause)* A project can be updated (name, description) or archived by its workspace's Owner or Admin. The earlier allowance for "the Member who created it" is removed: since FR-020 restricts project creation to Owner/Admin in v1, a Member can never be a project's creator, so that clause was unreachable and is dropped for consistency.
 
 ### Tasks
-* **FR-030**: Any workspace member with access to a project can create a task within it (title, description, status, due date, assignee).
+* **FR-030**: *(revised wording, same ID)* Any workspace member with access to a project can create a task within it (title, description, status, priority, start date, due date, assignee, labels).
 * **FR-031**: Any workspace member with access to a project can update or delete a task they created, are assigned to, or if they are Owner/Admin.
 * **FR-032**: Tasks have a status workflow (e.g., Todo, In Progress, Done — exact states defined in `database-design.md`).
 * **FR-033** *(new)*: A task's assignee must be a member of the same workspace as the task's project; the server validates assignee membership before saving an assignment and rejects assignment to a non-member.
 * **FR-034** *(new)*: A task can be assigned or reassigned by: the task's creator, the current assignee (self-unassign only), or any workspace Owner/Admin.
+* **FR-130** *(new, Draft)*: A task has a priority of `Low`, `Medium`, `High`, or `Highest`, defaulting to `Medium` when not specified. Priority carries no authorization meaning — any user who can update a task (FR-031) can change its priority.
+* **FR-131** *(new, Draft)*: A task may optionally have a start date, in addition to its existing due date (FR-030/FR-032). Both are calendar dates (no time-of-day component).
+* **FR-132** *(new, Draft)*: A task may optionally have one or more free-text labels for ad-hoc categorization. Labels are not a separate managed taxonomy in v1 — no shared label list, color assignment, or cross-project label management exists; each task's labels are just its own tags.
+* **FR-133** *(new, Draft)*: If a task has both a start date and a due date, the due date must not be earlier than the start date. The server rejects a create or update that would violate this, independent of any client-side check.
+* **FR-134** *(new, Draft)*: Members viewing a project's task board can filter tasks by priority and sort them by due date or by priority, to support triaging work by urgency.
 
 ### Real-time collaboration
 * **FR-040**: Clients viewing a project's task board receive real-time updates (create/update/delete/move/assign) from other members' actions without manual refresh.
@@ -190,4 +196,4 @@ Each requirement has a stable ID (`FR-xxx`) referenced by later specs (user stor
 
 ## 8. Approval
 
-**Approved by the user on 2026-10-09.** This PRD (v0.3) is the baseline for `docs/product/user-stories.md` and all subsequent specification documents, per the project's spec-driven development workflow.
+**Approved by the user on 2026-10-09.** This PRD (v0.3) is the baseline for `docs/product/user-stories.md` and all subsequent specification documents, per the project's spec-driven development workflow. v0.4/v0.5 were later additive revisions. **v0.6's FR-130–134 (task priority, start date, labels, date-range validation, filter/sort) are Draft, pending your explicit approval**, per this project's workflow of requiring approved requirements before implementation.

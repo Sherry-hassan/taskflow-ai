@@ -138,6 +138,20 @@ export function TrashIcon(props) {
   );
 }
 
+export function PencilIcon(props) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M12.9 3.6a1.4 1.4 0 0 1 2 0l1.5 1.5a1.4 1.4 0 0 1 0 2L7 16.5l-3.5.9.9-3.5 8.5-10.3Z"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+      <path d="M11 5.5l3 3" stroke="currentColor" strokeWidth="1.4" />
+    </svg>
+  );
+}
+
 export function CheckCircleIcon(props) {
   return (
     <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>

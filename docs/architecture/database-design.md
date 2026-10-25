@@ -1,10 +1,11 @@
 # TaskFlow AI — Database Design
 
-Status: **Approved**
-Version: 0.3
-Baseline: `docs/product/prd.md` v0.4 (Approved), `docs/product/user-stories.md` v0.3 (Approved), `docs/architecture/system-design.md` v0.3 (Approved)
+Status: **Pending review** *(v0.3 is Approved; v0.4's additions below are Draft pending your approval)*
+Version: 0.4
+Baseline: `docs/product/prd.md` v0.6 (v0.5 Approved; FR-130–134 Draft), `docs/product/user-stories.md` v0.4 (v0.3 Approved; US-130–134 Draft), `docs/architecture/system-design.md` v0.3 (Approved)
 
 **Revision history**
+* **0.4** *(Draft, pending approval)* — Jira-style task fields (2026-10-24): adds `Task.priority`, `Task.startDate`, `Task.labels` (§8), resolving PRD FR-130–134/US-130–134. Documents the priority rank/default decision, the date-only UTC-midnight storage convention, and a new `(projectId, priority)` index.
 * **0.3** — Resolved a conflict between this document and `openapi.yaml` surfaced during M6 implementation: `AIArtifact.requestedBy` was stated as unconditionally `required`, but `openapi.yaml`'s `SummaryArtifact` schema already documented it as nullable for scheduler-generated summaries ("no human requester" — FR-071). Per explicit user decision, this document now carries the same carve-out rather than correcting `openapi.yaml`: `requestedBy` is required for every `AIArtifact` *except* a `type: 'summary'` document with `scheduledWeekKey` set.
 * **0.2** — Propagated PRD v0.4's FR-106 resolution into `ScheduledSummaryRun.attempts` and removed the resolved ambiguity from §12. Corrected `AIArtifact.rawOutput`: re-derived against FR-120/FR-125 as unconditionally required (every row implies an actual model response occurred), including `pending_review` — not conditionally required on a specific state subset as previously (and still incorrectly) stated.
 * **0.1** — Initial draft.
@@ -122,7 +123,7 @@ Every collection below is a Mongoose schema. Fields cite the `FR-xxx`/`US-xxx`/`
 * Index on `workspaceId`.
 * Compound index on `(archived, lastTaskActivityAt)` — supports the scheduled job's eligibility query (FR-103) directly.
 
-## 8. `Task` (FR-030–034)
+## 8. `Task` (FR-030–034, FR-130–134 Draft)
 
 | Field | Type | Notes |
 |---|---|---|
@@ -132,17 +133,25 @@ Every collection below is a Mongoose schema. Fields cite the `FR-xxx`/`US-xxx`/`
 | `description` | String, optional | |
 | `status` | String enum — see **Design decision** below, required, default `todo` | |
 | `assigneeId` | ObjectId, ref `User`, optional | Must reference a user with an existing `Membership` in `workspaceId` — enforced at the service layer (FR-033), not a schema-level constraint (Mongoose/MongoDB can't natively validate "this ID exists in a different collection with a matching workspaceId" as a schema rule). |
-| `dueDate` | Date, optional | |
+| `priority` *(Draft, FR-130)* | String enum — see **Design decision** below, required, default `medium` | |
+| `startDate` *(Draft, FR-131)* | Date, optional | Date-only (no time-of-day); see **Design decision** below. |
+| `dueDate` | Date, optional | Date-only (no time-of-day) as of FR-131/FR-133; previously unconstrained format. |
+| `labels` *(Draft, FR-132)* | `[String]`, default `[]` | Free-text tags, trimmed/deduplicated, capped at 10 labels of 30 characters each at the service layer — no separate `Label` collection in v1 (FR-132 explicitly rules out a managed taxonomy). |
 | `createdBy` | ObjectId, ref `User`, required | |
 | `aiOriginated` | Boolean, required, default `false` | Set `true` only for tasks created via an approved plan suggestion (FR-052). |
 | `sourceArtifactId` | ObjectId, ref `AIArtifact`, optional | Set only when `aiOriginated: true`; links a task back to the plan suggestion that produced it, for audit (FR-080/NFR-004). |
 
 **Design decision — task status enum (resolves the open question the PRD deferred here, PRD §7).** `status` is one of: **`todo`**, **`in_progress`**, **`done`** — exactly the three states PRD FR-032 already used as its own illustrative example, so this adopts the PRD's own example as the literal v1 enum rather than inventing a different set. **Transitions are unrestricted in v1**: any status can move to any other status (e.g., `done → todo` is allowed, to support reopening a task). Rationale: the PRD does not describe a workflow requiring restricted transitions (no "review" gate, no "blocked" state, no sign-off step), and restricting transitions without a stated product reason would be inventing a rule the PRD doesn't ask for. If a future PRD revision adds a `blocked` state or restricts transitions (e.g., requiring `in_progress` before `done`), that's a PRD-level change, not an architecture-level one — this document's role is only to pick *a* concrete set to unblock `openapi.yaml`/implementation, consistent with what PRD §7 asked this document to do.
 
+**Design decision — task priority enum (Draft, resolves FR-130).** `priority` is one of: **`low`**, **`medium`**, **`high`**, **`highest`**, defaulting to `medium`. Sort order is the explicit rank `low < medium < high < highest` — **not alphabetical** — since "sort by priority" means "most urgent first," which alphabetical order would get wrong (`high` would sort before `highest` but after `low`, not reflecting urgency at all). This mirrors the same pattern as the status enum above: a concrete small set rather than free text, so clients and the API contract have a fixed vocabulary.
+
+**Design decision — date-only storage convention (Draft, resolves FR-131/FR-133).** `startDate` and `dueDate` are calendar dates with no meaningful time-of-day component. Both are stored as a `Date` at UTC midnight of the chosen calendar date (e.g., "2026-11-10" → `2026-11-10T00:00:00.000Z`), regardless of the server's or any client's local timezone. This keeps date-only comparisons (ordering validation, overdue checks) consistent across timezones: a date is always compared against another UTC-midnight date, never against a timezone-shifted wall-clock time. If both `startDate` and `dueDate` are set, the service layer rejects `dueDate < startDate` (FR-133) on both create and update.
+
 **Indexes**:
 * Compound index on `(workspaceId, projectId)` — primary access pattern (list a project's tasks, workspace-scoped).
 * Index on `assigneeId` — supports "my tasks" queries.
 * Compound index on `(projectId, status)` — supports board-by-column rendering.
+* Compound index on `(projectId, priority)` *(Draft, FR-130)* — supports priority-filtered board queries at scale; v1's actual filtering/sorting (FR-134) is done client-side on the already-loaded task list, so this index is forward-looking rather than load-bearing today.
 
 ## 9. `AIArtifact` (FR-050–056, FR-060/061, FR-070–073, FR-080/081, FR-120–125)
 
@@ -208,11 +217,11 @@ A dedicated collection, separate from `AIArtifact`, whose sole purpose is idempo
 | Workspaces/roles (FR-010–014, FR-096–099) | `Workspace`, `Membership` |
 | Invitations (FR-090–095) | `Invitation` |
 | Projects (FR-020–022, FR-103) | `Project` |
-| Tasks (FR-030–034) | `Task` |
+| Tasks (FR-030–034, FR-130–134 Draft) | `Task` |
 | AI planning/risk/summary (FR-050–056, FR-060/061, FR-070–073) | `AIArtifact` |
 | Scheduled summaries (FR-071, FR-103–107) | `Project.lastTaskActivityAt`, `ScheduledSummaryRun`, `AIArtifact` |
 | AI governance/diagnostics (FR-080/081, FR-120–125) | `AIArtifact`, `DiagnosticAccessLog` |
 
 ## Approval
 
-**Approved by the user on 2026-10-09.** This document (v0.1) is a baseline, alongside `docs/product/prd.md` v0.3, `docs/product/user-stories.md` v0.2, and `docs/architecture/system-design.md` v0.2, for `docs/api/openapi.yaml` and all subsequent specification documents, per the project's spec-driven development workflow.
+**Approved by the user on 2026-10-09.** This document (v0.1) is a baseline, alongside `docs/product/prd.md` v0.3, `docs/product/user-stories.md` v0.2, and `docs/architecture/system-design.md` v0.2, for `docs/api/openapi.yaml` and all subsequent specification documents, per the project's spec-driven development workflow. **v0.4's `Task.priority`/`startDate`/`labels` additions are Draft, pending your explicit approval.**

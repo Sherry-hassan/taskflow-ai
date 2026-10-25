@@ -6,10 +6,15 @@ import { useProjectSocket } from '../realtime/useProjectSocket.js';
 import PageHeader from '../components/PageHeader.jsx';
 import StatCard from '../components/StatCard.jsx';
 import KanbanBoard from '../components/KanbanBoard.jsx';
+import TaskForm from '../components/TaskForm.jsx';
 import AiPlanPanel from '../components/ai/AiPlanPanel.jsx';
 import AiRiskPanel from '../components/ai/AiRiskPanel.jsx';
 import AiSummaryPanel from '../components/ai/AiSummaryPanel.jsx';
-import { PlusIcon, SparkleIcon } from '../components/icons.jsx';
+import { SparkleIcon } from '../components/icons.jsx';
+
+// Mirrors server/src/models/Task.js TASK_PRIORITIES — explicit rank order
+// (not alphabetical) so "sort by priority" means highest-first.
+const PRIORITY_RANK = { low: 0, medium: 1, high: 2, highest: 3 };
 
 export default function ProjectPage() {
   const { workspaceId, projectId } = useParams();
@@ -23,9 +28,10 @@ export default function ProjectPage() {
   const [members, setMembers] = useState(null);
   const [error, setError] = useState('');
 
-  const [taskTitle, setTaskTitle] = useState('');
-  const [taskAssigneeId, setTaskAssigneeId] = useState('');
   const [creatingTask, setCreatingTask] = useState(false);
+  const [createFormKey, setCreateFormKey] = useState(0);
+  const [priorityFilter, setPriorityFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('none');
 
   const [goalDescription, setGoalDescription] = useState('');
   const [requestingPlan, setRequestingPlan] = useState(false);
@@ -97,21 +103,36 @@ export default function ProjectPage() {
     };
   }, [tasks]);
 
-  async function handleCreateTask(event) {
-    event.preventDefault();
+  const displayedTasks = useMemo(() => {
+    let list = tasks ?? [];
+    if (priorityFilter !== 'all') {
+      list = list.filter((task) => task.priority === priorityFilter);
+    }
+    if (sortBy === 'dueDate') {
+      list = [...list].sort((a, b) => {
+        if (!a.dueDate && !b.dueDate) return 0;
+        if (!a.dueDate) return 1;
+        if (!b.dueDate) return -1;
+        return new Date(a.dueDate) - new Date(b.dueDate);
+      });
+    } else if (sortBy === 'priority') {
+      list = [...list].sort((a, b) => (PRIORITY_RANK[b.priority] ?? 0) - (PRIORITY_RANK[a.priority] ?? 0));
+    }
+    return list;
+  }, [tasks, priorityFilter, sortBy]);
+
+  async function handleCreateTask(payload) {
     setError('');
     setCreatingTask(true);
     try {
-      await callWithAuth(api.createTask, workspaceId, projectId, {
-        title: taskTitle,
-        assigneeId: taskAssigneeId || null,
-      });
-      setTaskTitle('');
-      setTaskAssigneeId('');
+      await callWithAuth(api.createTask, workspaceId, projectId, payload);
       // No optimistic-only update: the realtime task:created event (or, if
       // the socket hasn't joined yet, this reload) is what actually reflects
       // the confirmed write — never assume success before the server says so.
       await load();
+      // Remounts TaskForm with fresh defaults (it owns its own field state) —
+      // the create form would otherwise keep showing the just-submitted values.
+      setCreateFormKey((key) => key + 1);
     } catch (err) {
       setError(err.message || 'Failed to create task');
     } finally {
@@ -125,6 +146,15 @@ export default function ProjectPage() {
     } catch (err) {
       setError(err.message || 'Failed to update task');
     }
+  }
+
+  async function handleUpdateTask(taskId, payload) {
+    setError('');
+    // Deliberately not caught here: TaskCard's edit dialog awaits this and
+    // shows the failure inline (next to the form it's still open on),
+    // instead of this page's own banner — unlike handleStatusChange/delete,
+    // which have no dedicated place to show a field-specific error.
+    await callWithAuth(api.updateTask, workspaceId, projectId, taskId, payload);
   }
 
   async function handleDeleteTask(taskId) {
@@ -250,59 +280,65 @@ export default function ProjectPage() {
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-slate-900">Board</h2>
           </div>
-          <form onSubmit={handleCreateTask} className="mb-5 flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-end">
-            <div className="flex-1">
-              <label htmlFor="task-title" className="mb-1 block text-xs font-medium text-slate-500">
-                Task title
-              </label>
-              <input
-                id="task-title"
-                value={taskTitle}
-                onChange={(event) => setTaskTitle(event.target.value)}
-                placeholder="New task title"
-                required
-                className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-              />
-            </div>
-            <div>
-              <label htmlFor="task-assignee" className="mb-1 block text-xs font-medium text-slate-500">
-                Assignee
-              </label>
-              <select
-                id="task-assignee"
-                value={taskAssigneeId}
-                onChange={(event) => setTaskAssigneeId(event.target.value)}
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-              >
-                <option value="">Unassigned</option>
-                {members?.map((member) => (
-                  <option key={member.userId} value={member.userId}>
-                    {member.email}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <button
-              type="submit"
-              disabled={creatingTask}
-              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-4 text-sm font-semibold text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              <PlusIcon className="h-4 w-4" />
-              {creatingTask ? 'Adding…' : 'Add task'}
-            </button>
-          </form>
+          <div className="mb-5 rounded-xl border border-slate-200 bg-white p-4">
+            <TaskForm
+              key={createFormKey}
+              mode="create"
+              members={members}
+              submitting={creatingTask}
+              onSubmit={handleCreateTask}
+            />
+          </div>
 
           {tasks === null && <p className="text-sm text-slate-500">Loading…</p>}
           {tasks !== null && tasks.length === 0 && <p className="text-sm text-slate-500">No tasks yet.</p>}
           {tasks !== null && tasks.length > 0 && (
-            <KanbanBoard
-              tasks={tasks}
-              currentUserId={userId}
-              currentRole={role}
-              membersByEmail={membersByEmail}
-              onStatusChange={handleStatusChange}
-              onDelete={handleDeleteTask}
-            />
+            <>
+              <div className="mb-3 flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <label htmlFor="priority-filter" className="text-xs font-medium text-slate-500">
+                    Filter by priority
+                  </label>
+                  <select
+                    id="priority-filter"
+                    value={priorityFilter}
+                    onChange={(event) => setPriorityFilter(event.target.value)}
+                    className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  >
+                    <option value="all">All</option>
+                    <option value="highest">Highest</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <label htmlFor="task-sort" className="text-xs font-medium text-slate-500">
+                    Sort by
+                  </label>
+                  <select
+                    id="task-sort"
+                    value={sortBy}
+                    onChange={(event) => setSortBy(event.target.value)}
+                    className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  >
+                    <option value="none">Default</option>
+                    <option value="dueDate">Due date</option>
+                    <option value="priority">Priority</option>
+                  </select>
+                </div>
+              </div>
+              <KanbanBoard
+                tasks={displayedTasks}
+                currentUserId={userId}
+                currentRole={role}
+                membersByEmail={membersByEmail}
+                members={members}
+                onStatusChange={handleStatusChange}
+                onDelete={handleDeleteTask}
+                onUpdate={handleUpdateTask}
+              />
+            </>
           )}
         </section>
 

@@ -10,7 +10,16 @@ const COLUMNS = [
   { status: 'done', label: 'Done', dotClass: 'bg-emerald-400' },
 ];
 
-export default function KanbanBoard({ tasks, currentUserId, currentRole, membersByEmail, onStatusChange, onDelete }) {
+export default function KanbanBoard({
+  tasks,
+  currentUserId,
+  currentRole,
+  membersByEmail,
+  members,
+  onStatusChange,
+  onDelete,
+  onUpdate,
+}) {
   return (
     <div className="flex gap-4 overflow-x-auto pb-2">
       {COLUMNS.map((column) => {
@@ -39,6 +48,8 @@ export default function KanbanBoard({ tasks, currentUserId, currentRole, members
                   currentRole={currentRole}
                   onStatusChange={onStatusChange}
                   onDelete={onDelete}
+                  onUpdate={onUpdate}
+                  members={members}
                   assigneeEmail={task.assigneeId ? membersByEmail?.[task.assigneeId] : null}
                 />
               ))}

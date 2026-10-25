@@ -7,6 +7,15 @@ function handleTaskError(err, res) {
   if (err instanceof taskService.InvalidStatusError) {
     return res.status(400).json({ message: 'Invalid status' });
   }
+  if (err instanceof taskService.InvalidPriorityError) {
+    return res.status(400).json({ message: 'Invalid priority' });
+  }
+  if (err instanceof taskService.InvalidDateRangeError) {
+    return res.status(400).json({ message: 'Due date cannot be earlier than start date' });
+  }
+  if (err instanceof taskService.InvalidLabelsError) {
+    return res.status(400).json({ message: 'Invalid labels' });
+  }
   if (err instanceof taskService.TaskNotFoundError) {
     return res.status(404).json({ message: 'Not found' });
   }
@@ -20,7 +29,7 @@ function handleTaskError(err, res) {
 }
 
 export async function createTask(req, res) {
-  const { title, description, status, assigneeId, dueDate } = req.body || {};
+  const { title, description, status, assigneeId, priority, startDate, dueDate, labels } = req.body || {};
   if (!title) {
     return res.status(400).json({ message: 'title is required' });
   }
@@ -29,7 +38,7 @@ export async function createTask(req, res) {
       req.auth.workspaceId,
       req.params.projectId,
       req.auth.userId,
-      { title, description, status, assigneeId, dueDate },
+      { title, description, status, assigneeId, priority, startDate, dueDate, labels },
     );
     return res.status(201).json(task);
   } catch (err) {
@@ -45,15 +54,22 @@ export async function listTasks(req, res) {
 }
 
 export async function updateTask(req, res) {
-  const { title, description, status, assigneeId, dueDate } = req.body || {};
+  const { title, description, status, assigneeId, priority, startDate, dueDate, labels } = req.body || {};
   const updates = {};
   if (title !== undefined) updates.title = title;
   if (description !== undefined) updates.description = description;
   if (status !== undefined) updates.status = status;
+  if (priority !== undefined) updates.priority = priority;
+  if (labels !== undefined) updates.labels = labels;
   if (Object.prototype.hasOwnProperty.call(req.body || {}, 'assigneeId')) {
     updates.assigneeId = assigneeId;
   }
-  if (dueDate !== undefined) updates.dueDate = dueDate;
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, 'startDate')) {
+    updates.startDate = startDate;
+  }
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, 'dueDate')) {
+    updates.dueDate = dueDate;
+  }
 
   try {
     const task = await taskService.updateTask(

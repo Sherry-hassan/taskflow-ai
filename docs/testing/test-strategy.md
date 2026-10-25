@@ -1,10 +1,11 @@
 # TaskFlow AI — Test Strategy
 
-Status: **Approved**
-Version: 0.3
-Baseline: `docs/product/prd.md` v0.4 (Approved), `docs/product/user-stories.md` v0.3 (Approved), `docs/architecture/system-design.md` v0.3 (Approved), `docs/architecture/database-design.md` v0.2 (Approved), `docs/api/openapi.yaml` (Approved), `docs/security/threat-model.md` v0.2 (Approved)
+Status: **Pending review** *(v0.3 is Approved; v0.4's additions below are Draft pending your approval)*
+Version: 0.4
+Baseline: `docs/product/prd.md` v0.6 (v0.5 Approved; FR-130–134 Draft), `docs/product/user-stories.md` v0.4 (v0.3 Approved; US-130–134 Draft), `docs/architecture/system-design.md` v0.3 (Approved), `docs/architecture/database-design.md` v0.4 (v0.3 Approved; Task.priority/startDate/labels Draft), `docs/api/openapi.yaml` (Approved, except the matching Draft fields), `docs/security/threat-model.md` v0.2 (Approved)
 
 **Revision history**
+* **0.4** *(Draft, pending approval)* — Jira-style task fields (2026-10-24): added Unit coverage for priority/date-range validation (§3), Component coverage for priority/overdue/label display and the net-new edit form (§4), and API/Integration coverage in §5.6 for the new fields and date-range rejection. Test counts below were actually run (see each new row) against the implementation already written for this feature, ahead of spec approval — flagged here rather than silently presented as already-approved scope.
 * **0.3** — Found during M1 implementation: §5.1's CSRF bullet listed `password-reset-confirm` alongside `refresh`/`logout`, contradicting `openapi.yaml` (which correctly marks that endpoint `security: []`, fully anonymous) and FR-008 itself, which scopes CSRF to "refresh/logout" specifically because those endpoints "rely on a cookie" — `password-reset/confirm` doesn't; it's authenticated by token possession, and a locked-out user wouldn't have a CSRF cookie anyway. Removed `password-reset-confirm` from that bullet as a drafting error; no behavior or other document changes as a result.
 * **0.2** — Propagated PRD v0.4's FR-106 resolution into §5.5's retry test (now asserts the concrete "3 total attempts" bound).
 * **0.1** — Initial draft.
@@ -36,6 +37,9 @@ Every environment that runs API/Integration or E2E tests **must** run MongoDB as
 | Refresh-token rotation logic | Atomic conditional-update call shape; family-revocation triggered on simulated "already consumed" result. | FR-005 |
 | Email normalization | Case-folding + trimming produces identical keys for equivalent inputs. | FR-091, US-013 |
 | Task status enum validation | Only `todo`/`in_progress`/`done` accepted; any value transitions to any other. | FR-032, `database-design.md` §8 |
+| Task priority enum validation *(Draft)* | Only `low`/`medium`/`high`/`highest` accepted; invalid values rejected. | FR-130, `database-design.md` §8 |
+| Task date-range validation *(Draft)* | `dueDate < startDate` rejected when both are present; either alone, or neither, is valid. | FR-133, `database-design.md` §8 |
+| Task labels sanitization *(Draft)* | Trimmed, deduplicated, capped at 10 labels/30 characters; malformed input rejected. | FR-132, `database-design.md` §8 |
 | AI output schema validators | Valid payloads pass; malformed payloads (missing fields, wrong types) are rejected — one test per artifact type (plan/risk/summary). | FR-051, FR-061, FR-072 |
 | `AIArtifact` lifecycle invariant (custom Mongoose validator) | `type: 'plan'` rejects `state: 'generated'`; `type: 'risk'`/`'summary'` reject `pending_review`/`approved`/`rejected`. | `database-design.md` §9's lifecycle invariant |
 | Sanitized AI-failure log construction | The constructed log object never contains `rawOutput` or prompt text, only IDs/timestamps/category. | FR-125 |
@@ -47,6 +51,11 @@ Every environment that runs API/Integration or E2E tests **must** run MongoDB as
 | Login/signup forms | Validation messages, generic error rendering on auth failure (never reveals which field was wrong). | US-001, US-002 |
 | Invitation-accept form | Email-mismatch and expired/used/revoked token states render the correct generic error. | US-014, US-015 |
 | Task board column | Status change UI only offers actions the current user's role/relationship allows (creator/assignee/Owner/Admin) — this is a UX-layer check; the authoritative enforcement is still server-side (API/Integration tests below) and this component test must not be mistaken for that enforcement. | US-036, US-039 |
+| Task card priority/date/label display *(Draft)* | Priority badge renders the readable label; a past due date on a non-`done` task renders as overdue, but not when the task is `done`; labels render as chips. | US-130/131/132 |
+| Task create/edit form *(Draft)* | Rejects submission with no title or a due date earlier than the start date before calling the submit handler; edit mode pre-fills existing priority/dates/labels; Cancel calls the cancel handler without submitting. | US-035, US-130/131/132/133 |
+
+### Net-new edit UI, flagged as a gap closure, not a regression
+No task-edit UI existed before this feature (only inline create + a status-change dropdown) — adding one is itself new testable surface, not a change to previously-tested behavior. The edit dialog's own authority gating (same creator/assignee/Owner/Admin rule as delete) is covered alongside the above.
 | Plan-suggestion review panel | Approve/reject controls are rendered only for Owner/Admin viewers; a Member sees the suggestion read-only. | US-030, US-051 |
 | AI artifact display | Never attempts to render a `rawOutput` field (the component shouldn't even receive one, per the API contract, but this test guards against a future regression that accidentally adds it to a response). | FR-125, US-066 |
 
@@ -90,6 +99,7 @@ This is where most of the PRD's authorization and lifecycle guarantees are actua
 * Assignee-must-be-workspace-member validation, including the self-unassign-only boundary for a non-creator/non-Owner/Admin current assignee (FR-033/034, US-039).
 * Project creation restricted to Owner/Admin; the removed "creating Member" exception in `FR-022` has no test asserting the old behavior (it would be testing for a bug) — only the current rule is tested (US-031/033).
 * Invitation email-normalization matching (case/whitespace-insensitive) and the expired/used/revoked rejection paths (FR-091/092, US-013/015).
+* *(Draft)* Task priority/startDate/dueDate/labels: create with all new fields; create with no optional dates (defaults priority to `medium`, dates/labels empty); each priority value accepted; invalid priority rejected (400); `dueDate < startDate` rejected on both create and update (400); edit persists priority/dates/labels and the change is reflected in a subsequent list call; malformed labels (too many, or too long) rejected (400); workspace isolation/authorization (FR-013/031) still apply with the new fields present in the request (US-130–134).
 
 ## 6. End-to-end tests (Playwright)
 
@@ -129,7 +139,7 @@ If any of these gain a defined control in a future revision of an earlier docume
 | Auth lifecycle (FR-001–009) | Unit (§3), API/Integration (§5.1), E2E (§6) |
 | Workspace isolation (FR-013, NFR-006) | API/Integration (§5.2) |
 | Roles/invitations/ownership (FR-090–099, FR-011/012) | API/Integration (§5.2), E2E (§6) |
-| Projects/Tasks (FR-020–034) | API/Integration (§5.6), Component (§4) |
+| Projects/Tasks (FR-020–034, FR-130–134 Draft) | API/Integration (§5.6), Component (§4), Unit (§3) |
 | Realtime (FR-040/041) | E2E (§6) |
 | AI planning + concurrency safety (FR-050–056) | Unit (§3), API/Integration (§5.3), E2E (§6) |
 | AI risk/summary (FR-060/061, FR-070–073) | API/Integration (§5.4), E2E (§6) |
@@ -140,4 +150,4 @@ If any of these gain a defined control in a future revision of an earlier docume
 
 ## Approval
 
-**Approved by the user on 2026-10-09.** This document (v0.1) is a baseline, alongside `docs/product/prd.md` v0.3, `docs/product/user-stories.md` v0.2, `docs/architecture/system-design.md` v0.2, `docs/architecture/database-design.md` v0.1, `docs/api/openapi.yaml`, and `docs/security/threat-model.md` v0.1, for `docs/development/implementation-plan.md` and all subsequent specification documents, per the project's spec-driven development workflow.
+**Approved by the user on 2026-10-09.** This document (v0.1) is a baseline, alongside `docs/product/prd.md` v0.3, `docs/product/user-stories.md` v0.2, `docs/architecture/system-design.md` v0.2, `docs/architecture/database-design.md` v0.1, `docs/api/openapi.yaml`, and `docs/security/threat-model.md` v0.1, for `docs/development/implementation-plan.md` and all subsequent specification documents, per the project's spec-driven development workflow. **v0.4's priority/date-range/label test rows are Draft, pending your explicit approval** — the tests themselves were written and actually run (see `docs/development/progress.md`), ahead of that approval, alongside the implementation; flagging this explicitly rather than treating "the tests pass" as the same thing as "the scope is approved."

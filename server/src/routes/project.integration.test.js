@@ -347,3 +347,161 @@ describe('Tasks (FR-030–034)', () => {
       .expect(400);
   });
 });
+
+describe('Task priority, dates, and labels (Jira-style fields, database-design.md §8 revision)', () => {
+  async function setupProject() {
+    const ctx = await createWorkspaceWithOwnerAdminMember();
+    const proj = await authed(
+      request(app).post(`/api/v1/workspaces/${ctx.workspaceId}/projects`),
+      ctx.owner.accessToken,
+    )
+      .send({ name: 'P1' })
+      .expect(201);
+    return { ...ctx, projectId: proj.body.id };
+  }
+
+  it('creates a task with priority, start date, due date, and labels', async () => {
+    const { owner, workspaceId, projectId } = await setupProject();
+    const res = await authed(
+      request(app).post(`/api/v1/workspaces/${workspaceId}/projects/${projectId}/tasks`),
+      owner.accessToken,
+    )
+      .send({
+        title: 'Ship it',
+        priority: 'high',
+        startDate: '2026-11-01',
+        dueDate: '2026-11-10',
+        labels: ['backend', 'urgent'],
+      })
+      .expect(201);
+    expect(res.body.priority).toBe('high');
+    expect(res.body.startDate).toBe('2026-11-01T00:00:00.000Z');
+    expect(res.body.dueDate).toBe('2026-11-10T00:00:00.000Z');
+    expect(res.body.labels).toEqual(['backend', 'urgent']);
+  });
+
+  it('creates a task with no optional dates, defaulting priority to medium', async () => {
+    const { owner, workspaceId, projectId } = await setupProject();
+    const res = await authed(
+      request(app).post(`/api/v1/workspaces/${workspaceId}/projects/${projectId}/tasks`),
+      owner.accessToken,
+    )
+      .send({ title: 'No dates' })
+      .expect(201);
+    expect(res.body.priority).toBe('medium');
+    expect(res.body.startDate).toBeNull();
+    expect(res.body.dueDate).toBeNull();
+    expect(res.body.labels).toEqual([]);
+  });
+
+  it.each(['low', 'medium', 'high', 'highest'])('accepts priority value "%s"', async (priority) => {
+    const { owner, workspaceId, projectId } = await setupProject();
+    const res = await authed(
+      request(app).post(`/api/v1/workspaces/${workspaceId}/projects/${projectId}/tasks`),
+      owner.accessToken,
+    )
+      .send({ title: 'Task', priority })
+      .expect(201);
+    expect(res.body.priority).toBe(priority);
+  });
+
+  it('rejects an invalid priority value', async () => {
+    const { owner, workspaceId, projectId } = await setupProject();
+    await authed(
+      request(app).post(`/api/v1/workspaces/${workspaceId}/projects/${projectId}/tasks`),
+      owner.accessToken,
+    )
+      .send({ title: 'Task', priority: 'urgent-ish' })
+      .expect(400);
+  });
+
+  it('rejects a due date earlier than the start date on create', async () => {
+    const { owner, workspaceId, projectId } = await setupProject();
+    await authed(
+      request(app).post(`/api/v1/workspaces/${workspaceId}/projects/${projectId}/tasks`),
+      owner.accessToken,
+    )
+      .send({ title: 'Task', startDate: '2026-11-10', dueDate: '2026-11-01' })
+      .expect(400);
+  });
+
+  it('rejects a due date earlier than the start date on update', async () => {
+    const { owner, workspaceId, projectId } = await setupProject();
+    const taskRes = await authed(
+      request(app).post(`/api/v1/workspaces/${workspaceId}/projects/${projectId}/tasks`),
+      owner.accessToken,
+    )
+      .send({ title: 'Task', startDate: '2026-11-01', dueDate: '2026-11-10' })
+      .expect(201);
+
+    await authed(
+      request(app).patch(`/api/v1/workspaces/${workspaceId}/projects/${projectId}/tasks/${taskRes.body.id}`),
+      owner.accessToken,
+    )
+      .send({ dueDate: '2026-10-31' })
+      .expect(400);
+  });
+
+  it('edit persists priority, dates, and labels', async () => {
+    const { owner, workspaceId, projectId } = await setupProject();
+    const taskRes = await authed(
+      request(app).post(`/api/v1/workspaces/${workspaceId}/projects/${projectId}/tasks`),
+      owner.accessToken,
+    )
+      .send({ title: 'Task' })
+      .expect(201);
+
+    const updated = await authed(
+      request(app).patch(`/api/v1/workspaces/${workspaceId}/projects/${projectId}/tasks/${taskRes.body.id}`),
+      owner.accessToken,
+    )
+      .send({
+        priority: 'highest',
+        startDate: '2026-11-01',
+        dueDate: '2026-11-05',
+        labels: ['release'],
+      })
+      .expect(200);
+    expect(updated.body.priority).toBe('highest');
+    expect(updated.body.startDate).toBe('2026-11-01T00:00:00.000Z');
+    expect(updated.body.dueDate).toBe('2026-11-05T00:00:00.000Z');
+    expect(updated.body.labels).toEqual(['release']);
+
+    const list = await authed(
+      request(app).get(`/api/v1/workspaces/${workspaceId}/projects/${projectId}/tasks`),
+      owner.accessToken,
+    ).expect(200);
+    const persisted = list.body.find((t) => t.id === taskRes.body.id);
+    expect(persisted.priority).toBe('highest');
+    expect(persisted.labels).toEqual(['release']);
+  });
+
+  it('rejects malformed labels (too many, or too long)', async () => {
+    const { owner, workspaceId, projectId } = await setupProject();
+    await authed(
+      request(app).post(`/api/v1/workspaces/${workspaceId}/projects/${projectId}/tasks`),
+      owner.accessToken,
+    )
+      .send({ title: 'Task', labels: Array.from({ length: 11 }, (_, i) => `label-${i}`) })
+      .expect(400);
+
+    await authed(
+      request(app).post(`/api/v1/workspaces/${workspaceId}/projects/${projectId}/tasks`),
+      owner.accessToken,
+    )
+      .send({ title: 'Task', labels: ['x'.repeat(31)] })
+      .expect(400);
+  });
+
+  it('workspace isolation and authorization still apply with the new fields (FR-013, FR-031)', async () => {
+    const { workspaceId, projectId } = await setupProject();
+    const outsider = await signupAndGetToken(uniqueEmail('outsider'));
+
+    await authed(
+      request(app).post(`/api/v1/workspaces/${workspaceId}/projects/${projectId}/tasks`),
+      outsider.accessToken,
+    )
+      .send({ title: 'Task', priority: 'high' })
+      .expect(403);
+  });
+});

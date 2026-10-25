@@ -1,4 +1,4 @@
-import { Task, TASK_STATUSES } from '../models/Task.js';
+import { Task, TASK_STATUSES, TASK_PRIORITIES } from '../models/Task.js';
 import { Project } from '../models/Project.js';
 import { Membership } from '../models/Membership.js';
 import { emitToProject } from '../realtime/emitter.js';
@@ -6,8 +6,62 @@ import { emitToProject } from '../realtime/emitter.js';
 export class TaskNotFoundError extends Error {}
 export class InvalidAssigneeError extends Error {}
 export class InvalidStatusError extends Error {}
+export class InvalidPriorityError extends Error {}
+export class InvalidDateRangeError extends Error {}
+export class InvalidLabelsError extends Error {}
 export class InsufficientTaskAuthorityError extends Error {}
 export class AssigneeOnlySelfUnassignError extends Error {}
+
+const MAX_LABELS = 10;
+const MAX_LABEL_LENGTH = 30;
+
+// Date-only convention (database-design.md §8 revision): client sends a
+// calendar date (either "YYYY-MM-DD" from a native date input, or a full
+// ISO string); this normalizes it to UTC midnight of that date so ordering
+// and overdue comparisons never drift across the server's/clients' local
+// timezones. `null` explicitly clears the field; `undefined` means "leave
+// as-is" and is handled by the caller before this runs.
+export function parseDateOnly(value) {
+  if (value === null) return null;
+  const datePart = typeof value === 'string' ? value.slice(0, 10) : value;
+  const parsed = new Date(`${datePart}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new InvalidDateRangeError();
+  }
+  return parsed;
+}
+
+export function assertValidDateRange(startDate, dueDate) {
+  if (startDate && dueDate && startDate.getTime() > dueDate.getTime()) {
+    throw new InvalidDateRangeError();
+  }
+}
+
+// Labels are free-text tags (no separate Label collection) — trimmed,
+// deduplicated, and capped so a client can't store unbounded strings here.
+export function sanitizeLabels(labels) {
+  if (labels === null || labels === undefined) return [];
+  if (!Array.isArray(labels)) {
+    throw new InvalidLabelsError();
+  }
+  const cleaned = [];
+  for (const raw of labels) {
+    if (typeof raw !== 'string') {
+      throw new InvalidLabelsError();
+    }
+    const trimmed = raw.trim();
+    if (!trimmed || trimmed.length > MAX_LABEL_LENGTH) {
+      throw new InvalidLabelsError();
+    }
+    if (!cleaned.includes(trimmed)) {
+      cleaned.push(trimmed);
+    }
+  }
+  if (cleaned.length > MAX_LABELS) {
+    throw new InvalidLabelsError();
+  }
+  return cleaned;
+}
 
 export function toDto(task) {
   return {
@@ -18,7 +72,10 @@ export function toDto(task) {
     description: task.description ?? null,
     status: task.status,
     assigneeId: task.assigneeId ? task.assigneeId.toString() : null,
+    priority: task.priority,
+    startDate: task.startDate ?? null,
     dueDate: task.dueDate ?? null,
+    labels: task.labels ?? [],
     aiOriginated: task.aiOriginated,
     sourceArtifactId: task.sourceArtifactId ? task.sourceArtifactId.toString() : null,
   };
@@ -58,11 +115,24 @@ export async function insertTaskDocument(fields, { session } = {}) {
 
 // FR-030: any workspace member with access to a project (enforced by the
 // route's requireWorkspaceRole() — any role, membership only).
-export async function createTask(workspaceId, projectId, userId, { title, description, status, assigneeId, dueDate }) {
+export async function createTask(
+  workspaceId,
+  projectId,
+  userId,
+  { title, description, status, assigneeId, priority, startDate, dueDate, labels },
+) {
   await assertValidAssignee(workspaceId, assigneeId);
   if (status !== undefined && !TASK_STATUSES.includes(status)) {
     throw new InvalidStatusError();
   }
+  if (priority !== undefined && !TASK_PRIORITIES.includes(priority)) {
+    throw new InvalidPriorityError();
+  }
+
+  const parsedStartDate = startDate !== undefined ? parseDateOnly(startDate) : undefined;
+  const parsedDueDate = dueDate !== undefined ? parseDateOnly(dueDate) : undefined;
+  assertValidDateRange(parsedStartDate ?? null, parsedDueDate ?? null);
+  const cleanedLabels = sanitizeLabels(labels);
 
   const task = await insertTaskDocument({
     workspaceId,
@@ -71,7 +141,10 @@ export async function createTask(workspaceId, projectId, userId, { title, descri
     description,
     status,
     assigneeId: assigneeId ?? null,
-    dueDate,
+    priority,
+    startDate: parsedStartDate,
+    dueDate: parsedDueDate,
+    labels: cleanedLabels,
     createdBy: userId,
   });
   await touchProjectActivity(projectId);
@@ -123,13 +196,27 @@ export async function updateTask(workspaceId, projectId, taskId, actingUserId, a
 
   if (updates.title !== undefined) task.title = updates.title;
   if (updates.description !== undefined) task.description = updates.description;
-  if (updates.dueDate !== undefined) task.dueDate = updates.dueDate;
   if (updates.status !== undefined) {
     if (!TASK_STATUSES.includes(updates.status)) {
       throw new InvalidStatusError();
     }
     task.status = updates.status;
   }
+  if (updates.priority !== undefined) {
+    if (!TASK_PRIORITIES.includes(updates.priority)) {
+      throw new InvalidPriorityError();
+    }
+    task.priority = updates.priority;
+  }
+  if (updates.labels !== undefined) {
+    task.labels = sanitizeLabels(updates.labels);
+  }
+
+  const nextStartDate = updates.startDate !== undefined ? parseDateOnly(updates.startDate) : task.startDate;
+  const nextDueDate = updates.dueDate !== undefined ? parseDateOnly(updates.dueDate) : task.dueDate;
+  assertValidDateRange(nextStartDate, nextDueDate);
+  if (updates.startDate !== undefined) task.startDate = nextStartDate;
+  if (updates.dueDate !== undefined) task.dueDate = nextDueDate;
 
   await task.save();
   await touchProjectActivity(projectId);
