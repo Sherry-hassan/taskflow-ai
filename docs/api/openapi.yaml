@@ -1,8 +1,9 @@
 # TaskFlow AI — API Contract
 #
-# Status: Approved, except the Task.priority/startDate/labels additions below (TaskPriority schema,
-#         Task/TaskCreateRequest/TaskUpdateRequest's new fields) — those are Draft, pending approval,
-#         mirroring PRD v0.6 FR-130–134 (Draft) / database-design.md v0.4 (Draft).
+# Status: Approved. The Task.priority/startDate/labels additions (TaskPriority schema,
+#         Task/TaskCreateRequest/TaskUpdateRequest's new fields) were approved by the user on 2026-10-25,
+#         mirroring PRD v0.6 FR-130–134 (Approved) / database-design.md v0.4 (Approved). The `labels` field
+#         is approved as API-only for now — see Task's `labels` property description below and PRD FR-132.
 # Version: 0.1 (this document's own revision, distinct from info.version below)
 # Baseline: docs/product/prd.md v0.3 (Approved), docs/product/user-stories.md v0.2 (Approved),
 #           docs/architecture/system-design.md v0.2 (Approved), docs/architecture/database-design.md v0.1 (Approved)
@@ -970,7 +971,10 @@ components:
         labels:
           type: array
           items: { type: string }
-          description: Free-text tags, max 10, 30 characters each.
+          description: >
+            Free-text tags, max 10, 30 characters each. API-only in this v1 release — the client provides
+            no form field to set or edit a label, though existing labels still render as chips on a task
+            card (PRD FR-132).
         aiOriginated: { type: boolean }
         sourceArtifactId: { type: string, nullable: true }
 
